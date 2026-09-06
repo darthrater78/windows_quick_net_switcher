@@ -1,11 +1,13 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Drawing;
 using WinForms = System.Windows.Forms;
 
@@ -15,11 +17,15 @@ public partial class MainWindow : Window
 {
     private WinForms.NotifyIcon? _trayIcon;
     private List<RouteEntry> _allRoutes = new();
+    private ObservableCollection<AdapterViewModel> _adapters = new();
+    private System.Windows.Point _dragStartPoint;
+    private bool _isDragging;
 
     public MainWindow()
     {
         InitializeComponent();
         SetupTrayIcon();
+        AdapterList.ItemsSource = _adapters;
         LoadAdapters();
     }
 
@@ -54,11 +60,11 @@ public partial class MainWindow : Window
     {
         var bmp = new Bitmap(32, 32);
         using var g = Graphics.FromImage(bmp);
-        g.Clear(Color.Transparent);
+        g.Clear(System.Drawing.Color.Transparent);
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        using var brush = new SolidBrush(Color.FromArgb(0, 120, 212));
+        using var brush = new SolidBrush(System.Drawing.Color.FromArgb(0, 120, 212));
         g.FillEllipse(brush, 2, 2, 28, 28);
-        using var pen = new Pen(Color.White, 2.5f);
+        using var pen = new System.Drawing.Pen(System.Drawing.Color.White, 2.5f);
         g.DrawLine(pen, 10, 16, 22, 10);
         g.DrawLine(pen, 22, 10, 18, 10);
         g.DrawLine(pen, 22, 10, 22, 14);
@@ -92,15 +98,25 @@ public partial class MainWindow : Window
             var adapters = NetworkAdapterService.GetAdapters()
                 .Select(AdapterViewModel.FromInfo)
                 .ToList();
-            AdapterList.ItemsSource = adapters;
 
-            var enabled = adapters.Count(a => a.IsEnabled);
-            StatusText.Text = $"{adapters.Count} adapters found  ·  {enabled} enabled";
+            var ordered = AdapterOrderService.ApplyOrder(adapters, a => a.AdapterId);
+
+            _adapters.Clear();
+            foreach (var a in ordered)
+                _adapters.Add(a);
+
+            var enabled = _adapters.Count(a => a.IsEnabled);
+            StatusText.Text = $"{_adapters.Count} adapters found  ·  {enabled} enabled";
         }
         catch (Exception ex)
         {
             StatusText.Text = $"Error: {ex.Message}";
         }
+    }
+
+    private void SaveAdapterOrder()
+    {
+        AdapterOrderService.Save(_adapters.Select(a => a.AdapterId));
     }
 
     private void LoadRoutes()
@@ -142,8 +158,7 @@ public partial class MainWindow : Window
 
         var enable = toggle.IsChecked == true;
         var action = enable ? "Enabling" : "Disabling";
-        var adapter = (AdapterList.ItemsSource as List<AdapterViewModel>)?
-            .FirstOrDefault(a => a.AdapterId == adapterId);
+        var adapter = _adapters.FirstOrDefault(a => a.AdapterId == adapterId);
         var name = adapter?.Name ?? adapterId;
 
         StatusText.Text = $"{action} {name}...";
@@ -244,5 +259,103 @@ public partial class MainWindow : Window
 
         _trayIcon?.Dispose();
         _trayIcon = null;
+    }
+
+    // --- Drag and drop reordering ---
+
+    private static bool IsOnDragHandle(MouseEventArgs e, ListBox listBox)
+    {
+        var hit = e.OriginalSource as DependencyObject;
+        while (hit != null)
+        {
+            if (hit is FrameworkElement fe && fe.Tag as string == "DragHandle")
+                return true;
+            hit = VisualTreeHelper.GetParent(hit);
+        }
+        return false;
+    }
+
+    private static ListBoxItem? GetListBoxItemAt(ListBox listBox, System.Windows.Point pos)
+    {
+        var element = listBox.InputHitTest(pos) as DependencyObject;
+        while (element != null)
+        {
+            if (element is ListBoxItem item)
+                return item;
+            element = VisualTreeHelper.GetParent(element);
+        }
+        return null;
+    }
+
+    private void AdapterList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsOnDragHandle(e, AdapterList)) return;
+        _dragStartPoint = e.GetPosition(AdapterList);
+        _isDragging = false;
+    }
+
+    private void AdapterList_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _isDragging)
+            return;
+
+        var pos = e.GetPosition(AdapterList);
+        var diff = pos - _dragStartPoint;
+        if (Math.Abs(diff.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        var item = GetListBoxItemAt(AdapterList, _dragStartPoint);
+        if (item?.DataContext is not AdapterViewModel adapter)
+            return;
+
+        _isDragging = true;
+        DragDrop.DoDragDrop(AdapterList, adapter, DragDropEffects.Move);
+        _isDragging = false;
+    }
+
+    private void AdapterList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _isDragging = false;
+    }
+
+    private void AdapterList_DragOver(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(typeof(AdapterViewModel)))
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+        e.Effects = DragDropEffects.Move;
+        e.Handled = true;
+    }
+
+    private void AdapterList_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(typeof(AdapterViewModel)) is not AdapterViewModel dragged)
+            return;
+
+        var dropPos = e.GetPosition(AdapterList);
+        var targetItem = GetListBoxItemAt(AdapterList, dropPos);
+        var target = targetItem?.DataContext as AdapterViewModel;
+
+        var oldIndex = _adapters.IndexOf(dragged);
+        if (oldIndex < 0) return;
+
+        int newIndex;
+        if (target != null && target != dragged)
+        {
+            newIndex = _adapters.IndexOf(target);
+        }
+        else
+        {
+            newIndex = _adapters.Count - 1;
+        }
+
+        if (oldIndex == newIndex) return;
+
+        _adapters.Move(oldIndex, newIndex);
+        SaveAdapterOrder();
+        StatusText.Text = $"Adapter order updated";
     }
 }

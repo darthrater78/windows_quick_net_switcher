@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Management;
+using System.Net.NetworkInformation;
 
 namespace QuickNetSwitcher;
 
@@ -53,6 +54,18 @@ public static class NetworkAdapterService
                 configMap[index] = (ip, cidr, gateway, metric, dnsSuffix);
             }
         }
+
+        var dnsFallback = new Dictionary<string, string>();
+        try
+        {
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                var props = ni.GetIPProperties();
+                if (!string.IsNullOrEmpty(props.DnsSuffix))
+                    dnsFallback[ni.Id] = props.DnsSuffix;
+            }
+        }
+        catch { }
 
         using var searcher = new ManagementObjectSearcher(
             "SELECT * FROM Win32_NetworkAdapter WHERE PhysicalAdapter = True");
@@ -109,16 +122,23 @@ public static class NetworkAdapterService
 
             configMap.TryGetValue(adapterId, out var netConfig);
 
+            var dnsSuffix = netConfig.DnsSuffix ?? "";
+            if (string.IsNullOrEmpty(dnsSuffix))
+            {
+                var guid = obj["GUID"]?.ToString() ?? "";
+                if (!string.IsNullOrEmpty(guid))
+                    dnsFallback.TryGetValue(guid, out dnsSuffix!);
+                dnsSuffix ??= "";
+            }
+
             adapters.Add(new AdapterInfo(
                 name, description, adapterId, interfaceIndex, adapterType,
                 isEnabled, status, speed, mac,
                 netConfig.Ip ?? "", netConfig.Cidr ?? "", netConfig.Gateway ?? "",
-                netConfig.Metric, netConfig.DnsSuffix ?? ""));
+                netConfig.Metric, dnsSuffix));
         }
 
-        return adapters.OrderByDescending(a => a.IsEnabled)
-                       .ThenBy(a => a.Name)
-                       .ToList();
+        return adapters.OrderBy(a => a.Name).ToList();
     }
 
     public static bool SetAdapterState(string adapterId, bool enable)
