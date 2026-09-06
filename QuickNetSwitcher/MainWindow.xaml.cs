@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Linq;
 using System.Threading.Tasks;
@@ -48,7 +49,7 @@ public partial class MainWindow : Window
         _trayIcon.ContextMenuStrip = contextMenu;
     }
 
-    private static Icon CreateTrayIcon()
+    private static System.Drawing.Icon CreateTrayIcon()
     {
         var bmp = new Bitmap(32, 32);
         using var g = Graphics.FromImage(bmp);
@@ -65,7 +66,7 @@ public partial class MainWindow : Window
         g.DrawLine(pen, 10, 22, 14, 22);
         g.DrawLine(pen, 10, 22, 10, 18);
         var handle = bmp.GetHicon();
-        return Icon.FromHandle(handle);
+        return System.Drawing.Icon.FromHandle(handle);
     }
 
     private void ShowFromTray()

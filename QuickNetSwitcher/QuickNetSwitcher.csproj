@@ -5,7 +5,6 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
     <Version>1.0.0</Version>
     <AssemblyTitle>Quick Net Switcher</AssemblyTitle>
     <Description>Quickly toggle network adapters on/off from the system tray</Description>
@@ -13,6 +12,7 @@
     <Product>Quick Net Switcher</Product>
     <RepositoryUrl>https://github.com/darthrater78/windows_quick_net_switcher</RepositoryUrl>
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
