@@ -182,6 +182,10 @@
                                                            FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}"
                                                            Visibility="{Binding HasSpeed, Converter={StaticResource BoolToVis}}" />
+                                                <TextBlock Text="{Binding MacAddress, StringFormat='  ·  {0}'}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Visibility="{Binding HasMac, Converter={StaticResource BoolToVis}}" />
                                             </StackPanel>
                                             <!-- Row 3: IP / CIDR / Gateway / Metric -->
                                             <StackPanel Orientation="Horizontal" Margin="16,2,0,0"

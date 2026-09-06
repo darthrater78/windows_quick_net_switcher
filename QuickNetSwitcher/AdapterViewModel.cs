@@ -24,6 +24,7 @@ public class AdapterViewModel
     public bool HasDnsSuffix => !string.IsNullOrEmpty(DnsSuffix);
     public bool HasMetric => InterfaceMetric > 0;
     public string MetricDisplay => InterfaceMetric > 0 ? $"metric {InterfaceMetric}" : "";
+    public bool HasMac => !string.IsNullOrEmpty(MacAddress);
 
     public static AdapterViewModel FromInfo(AdapterInfo info) => new()
     {

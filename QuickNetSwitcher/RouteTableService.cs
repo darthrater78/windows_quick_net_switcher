@@ -99,7 +99,7 @@ public static class RouteTableService
         }
 
         using var adapterSearcher = new ManagementObjectSearcher(
-            "SELECT DeviceID, NetConnectionID, Description FROM Win32_NetworkAdapter WHERE PhysicalAdapter = True");
+            "SELECT DeviceID, NetConnectionID FROM Win32_NetworkAdapter WHERE NetConnectionID IS NOT NULL");
         foreach (ManagementObject obj in adapterSearcher.Get())
         {
             var devId = obj["DeviceID"]?.ToString() ?? "";
