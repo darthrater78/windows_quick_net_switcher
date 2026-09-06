@@ -8,12 +8,23 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 
 ## Features
 
-- View all physical network adapters with real-time status
+**Adapters tab**
+- View all physical network adapters with real-time status, speed, MAC address, IP/CIDR, gateway, DNS suffix, and interface metric
 - Toggle adapters on/off with a single click
+- Drag-to-reorder the adapter list — order is remembered between launches
+- Edit an adapter's interface metric (1–9999) via a dialog
+
+**Route Table tab**
+- View the system route table with friendly adapter names
+- Filter by route type
+
+**Firewall tab**
+- Toggle Windows Firewall on/off per profile (Domain, Private, Public)
+
+**General**
 - System tray icon — minimize to tray and keep it running in the background
-- Shows connection speed, adapter type, and MAC address
-- Clean Windows 11-inspired UI
-- Runs as administrator (required to enable/disable adapters)
+- Custom app icon and Windows 11-inspired UI
+- Runs as administrator (required to enable/disable adapters and change firewall/metric settings)
 - Single-file self-contained executable — no .NET runtime install needed
 
 ## Screenshot
@@ -28,6 +39,13 @@ Download the latest release from the [Releases page](https://github.com/darthrat
 
 - Windows 10 or Windows 11
 - Administrator privileges (the app requests elevation on launch)
+
+## Download Size
+
+The release exe is ~60–150 MB because it is published as a **self-contained
+single-file** binary — the entire .NET 8 runtime is bundled so you don't need
+to install .NET on the target machine. No installer required: just download,
+right-click, and run as administrator.
 
 ## Building from Source
 
@@ -59,16 +77,23 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 
 ## How It Works
 
-The app uses WMI (`Win32_NetworkAdapter`) to discover and control physical network adapters. It calls the `Enable()` and `Disable()` WMI methods, which require administrator privileges. The UI is built with WPF and uses Windows Forms interop for the system tray icon.
+- **Adapters:** WMI (`Win32_NetworkAdapter`) discovers physical adapters and calls the `Enable()`/`Disable()` methods to toggle them. Adapter display order is persisted to a JSON file in `%LOCALAPPDATA%`. Interface metric is set via `netsh interface ipv4/ipv6 set interface`.
+- **Route Table:** WMI queries the system route table and resolves adapter indexes to friendly names for display.
+- **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`.
+- The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, metric, and firewall changes all require it.
 
 ## Version History
 
 ### v1.0.0 — 2026-09-06
 - Initial release
-- List all physical network adapters with status
+- List all physical network adapters with status, speed, MAC, IP/CIDR, gateway, DNS suffix, and metric
 - Toggle adapters on/off
+- Drag-to-reorder adapter list with persisted order
+- Edit interface metric via dialog
+- Route table viewer with type filtering and friendly adapter names
+- Windows Firewall profile toggle (Domain/Private/Public)
 - System tray icon with minimize-to-tray
-- Windows 11-inspired UI styling
+- Custom app icon and Windows 11-inspired UI styling
 - Single-file self-contained publish support
 - CI/CD with GitHub Actions (build on PR, release on tag)
 

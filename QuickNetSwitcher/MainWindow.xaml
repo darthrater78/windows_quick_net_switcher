@@ -2,12 +2,12 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Quick Net Switcher v1.0.0"
-        Width="420" Height="520"
-        MinWidth="380" MinHeight="400"
+        Width="620" Height="580"
+        MinWidth="500" MinHeight="450"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource SurfaceBrush}"
-        ResizeMode="CanResizeWithGrip"
         Icon="Resources/app.ico"
+        ResizeMode="CanResizeWithGrip"
         StateChanged="Window_StateChanged"
         Closing="Window_Closing">
     <Window.Resources>
@@ -23,7 +23,7 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+        <StackPanel Grid.Row="0" Margin="0,0,0,8">
             <TextBlock Text="Quick Net Switcher"
                        FontSize="22" FontWeight="SemiBold"
                        Foreground="{StaticResource TextPrimaryBrush}" />
@@ -38,7 +38,7 @@
                 Background="{StaticResource CardBrush}"
                 CornerRadius="8"
                 Padding="12,8"
-                Margin="0,0,0,12">
+                Margin="0,0,0,8">
             <Border.Effect>
                 <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.1" />
             </Border.Effect>
@@ -67,83 +67,320 @@
             </DockPanel>
         </Border>
 
-        <!-- Adapter list -->
-        <Border Grid.Row="2"
-                Background="{StaticResource CardBrush}"
-                CornerRadius="8"
-                Padding="4">
-            <Border.Effect>
-                <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.1" />
-            </Border.Effect>
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <ItemsControl x:Name="AdapterList">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Padding="12,10"
-                                    BorderBrush="{StaticResource BorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    Cursor="Hand"
-                                    MouseLeftButtonUp="AdapterItem_Click">
-                                <DockPanel>
-                                    <!-- Toggle switch on the right -->
-                                    <CheckBox DockPanel.Dock="Right"
-                                              IsChecked="{Binding IsEnabled, Mode=OneWay}"
-                                              Style="{StaticResource ToggleSwitchStyle}"
-                                              VerticalAlignment="Center"
-                                              Click="ToggleAdapter_Click"
-                                              Tag="{Binding AdapterId}" />
+        <!-- Tab control: Adapters / Route Table -->
+        <TabControl Grid.Row="2" x:Name="MainTabs"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    SelectionChanged="MainTabs_SelectionChanged">
+            <TabControl.Resources>
+                <Style TargetType="TabItem">
+                    <Setter Property="Padding" Value="12,6" />
+                    <Setter Property="FontSize" Value="13" />
+                </Style>
+            </TabControl.Resources>
 
-                                    <!-- Adapter info on the left -->
-                                    <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
-                                        <DockPanel>
-                                            <Ellipse Width="8" Height="8"
-                                                     Margin="0,0,8,0"
-                                                     VerticalAlignment="Center">
-                                                <Ellipse.Style>
-                                                    <Style TargetType="Ellipse">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Status}" Value="Connected">
-                                                                <Setter Property="Fill" Value="{StaticResource EnabledBrush}" />
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Status}" Value="Disconnected">
-                                                                <Setter Property="Fill" Value="#FFA500" />
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Status}" Value="Disabled">
-                                                                <Setter Property="Fill" Value="{StaticResource DisabledBrush}" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                        <Setter Property="Fill" Value="#999999" />
-                                                    </Style>
-                                                </Ellipse.Style>
-                                            </Ellipse>
-                                            <TextBlock Text="{Binding Name}"
-                                                       FontSize="14" FontWeight="Medium"
-                                                       Foreground="{StaticResource TextPrimaryBrush}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                        </DockPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="16,3,0,0">
-                                            <TextBlock FontSize="11"
-                                                       Foreground="{StaticResource TextSecondaryBrush}">
-                                                <TextBlock.Text>
-                                                    <MultiBinding StringFormat="{}{0}  ·  {1}">
-                                                        <Binding Path="Status" />
-                                                        <Binding Path="NetworkAdapterType" />
-                                                    </MultiBinding>
-                                                </TextBlock.Text>
-                                            </TextBlock>
-                                            <TextBlock Text="{Binding Speed, StringFormat='  ·  {0}'}"
-                                                       FontSize="11"
+            <!-- Adapters Tab -->
+            <TabItem Header="Adapters">
+                <Border Background="{StaticResource CardBrush}"
+                        CornerRadius="0,0,8,8"
+                        Padding="4">
+                    <Border.Effect>
+                        <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.1" />
+                    </Border.Effect>
+                    <ListBox x:Name="AdapterList"
+                             AllowDrop="True"
+                             PreviewMouseLeftButtonDown="AdapterList_PreviewMouseLeftButtonDown"
+                             PreviewMouseMove="AdapterList_PreviewMouseMove"
+                             PreviewMouseLeftButtonUp="AdapterList_PreviewMouseLeftButtonUp"
+                             DragOver="AdapterList_DragOver"
+                             Drop="AdapterList_Drop"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             HorizontalContentAlignment="Stretch"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <ContentPresenter />
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="0,0,12,0"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="0,0,0,1">
+                                    <DockPanel>
+                                        <!-- Toggle switch on the right -->
+                                        <CheckBox DockPanel.Dock="Right"
+                                                  IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                                  Style="{StaticResource ToggleSwitchStyle}"
+                                                  VerticalAlignment="Top"
+                                                  Margin="0,14,0,0"
+                                                  Click="ToggleAdapter_Click"
+                                                  Tag="{Binding AdapterId}" />
+
+                                        <!-- Drag handle -->
+                                        <Border DockPanel.Dock="Left"
+                                                Width="24" Cursor="SizeAll"
+                                                Background="Transparent"
+                                                Tag="DragHandle">
+                                            <TextBlock Text="⠿" FontSize="16"
                                                        Foreground="{StaticResource TextSecondaryBrush}"
-                                                       Visibility="{Binding HasSpeed, Converter={StaticResource BoolToVis}}" />
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       Opacity="0.5" />
+                                        </Border>
+
+                                        <!-- Adapter info -->
+                                        <StackPanel VerticalAlignment="Center" Margin="4,10,12,10">
+                                            <!-- Row 1: status dot + name -->
+                                            <DockPanel>
+                                                <Ellipse Width="8" Height="8"
+                                                         Margin="0,0,8,0"
+                                                         VerticalAlignment="Center">
+                                                    <Ellipse.Style>
+                                                        <Style TargetType="Ellipse">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Connected">
+                                                                    <Setter Property="Fill" Value="{StaticResource EnabledBrush}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Disconnected">
+                                                                    <Setter Property="Fill" Value="#FFA500" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Disabled">
+                                                                    <Setter Property="Fill" Value="{StaticResource DisabledBrush}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                            <Setter Property="Fill" Value="#999999" />
+                                                        </Style>
+                                                    </Ellipse.Style>
+                                                </Ellipse>
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="14" FontWeight="Medium"
+                                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </DockPanel>
+                                            <!-- Row 2: status + description -->
+                                            <StackPanel Orientation="Horizontal" Margin="16,3,0,0">
+                                                <TextBlock FontSize="11"
+                                                           Foreground="{StaticResource TextSecondaryBrush}">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0}  ·  {1}">
+                                                            <Binding Path="Status" />
+                                                            <Binding Path="Description" />
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding Speed, StringFormat='  ·  {0}'}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Visibility="{Binding HasSpeed, Converter={StaticResource BoolToVis}}" />
+                                                <TextBlock Text="{Binding MacAddress, StringFormat='  ·  {0}'}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Visibility="{Binding HasMac, Converter={StaticResource BoolToVis}}" />
+                                            </StackPanel>
+                                            <!-- Row 3: IP / CIDR / Gateway / Metric -->
+                                            <StackPanel Orientation="Horizontal" Margin="16,2,0,0"
+                                                        Visibility="{Binding HasIp, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="{Binding IpDisplay}"
+                                                           FontSize="12" FontFamily="Consolas"
+                                                           Foreground="{StaticResource AccentBrush}" />
+                                                <TextBlock Text="{Binding GatewayDisplay, StringFormat='   {0}'}"
+                                                           FontSize="11" FontFamily="Consolas"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Visibility="{Binding HasGateway, Converter={StaticResource BoolToVis}}" />
+                                                <TextBlock Text="{Binding MetricDisplay, StringFormat='   {0}'}"
+                                                           FontSize="11" FontFamily="Consolas"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Visibility="{Binding HasMetric, Converter={StaticResource BoolToVis}}" />
+                                                <Button Content="edit" FontSize="10" Padding="4,0"
+                                                        Margin="6,0,0,0" Cursor="Hand"
+                                                        Background="Transparent" BorderThickness="0"
+                                                        Foreground="{StaticResource AccentBrush}"
+                                                        Tag="{Binding}"
+                                                        Click="EditMetric_Click"
+                                                        VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <!-- Row 4: DNS suffix -->
+                                            <TextBlock Margin="16,2,0,0"
+                                                       FontSize="11" FontFamily="Consolas"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Text="{Binding DnsSuffix, StringFormat='dns: {0}'}"
+                                                       Visibility="{Binding HasDnsSuffix, Converter={StaticResource BoolToVis}}" />
                                         </StackPanel>
-                                    </StackPanel>
-                                </DockPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
-        </Border>
+                                    </DockPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+            </TabItem>
+
+            <!-- Route Table Tab -->
+            <TabItem Header="Route Table">
+                <Border Background="{StaticResource CardBrush}"
+                        CornerRadius="0,0,8,8"
+                        Padding="4">
+                    <Border.Effect>
+                        <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.1" />
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Route filter bar -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8,8,8,4">
+                            <CheckBox x:Name="ShowDefaultRoutes" Content="Default" IsChecked="True"
+                                      Margin="0,0,12,0" Checked="RouteFilter_Changed" Unchecked="RouteFilter_Changed"
+                                      FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
+                            <CheckBox x:Name="ShowRemoteRoutes" Content="Remote" IsChecked="True"
+                                      Margin="0,0,12,0" Checked="RouteFilter_Changed" Unchecked="RouteFilter_Changed"
+                                      FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
+                            <CheckBox x:Name="ShowLocalRoutes" Content="Local" IsChecked="True"
+                                      Margin="0,0,12,0" Checked="RouteFilter_Changed" Unchecked="RouteFilter_Changed"
+                                      FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
+                            <CheckBox x:Name="ShowOtherRoutes" Content="Link-Local / Loopback / Broadcast"
+                                      IsChecked="False" Checked="RouteFilter_Changed" Unchecked="RouteFilter_Changed"
+                                      FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" />
+                        </StackPanel>
+
+                        <DataGrid Grid.Row="1" x:Name="RouteGrid"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  HeadersVisibility="Column"
+                                  GridLinesVisibility="Horizontal"
+                                  HorizontalGridLinesBrush="{StaticResource BorderBrush}"
+                                  BorderThickness="0"
+                                  Background="Transparent"
+                                  RowBackground="Transparent"
+                                  AlternatingRowBackground="#F8F8F8"
+                                  SelectionMode="Single"
+                                  CanUserResizeRows="False"
+                                  FontSize="12"
+                                  FontFamily="Consolas">
+                            <DataGrid.ColumnHeaderStyle>
+                                <Style TargetType="DataGridColumnHeader">
+                                    <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+                                    <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+                                    <Setter Property="Padding" Value="8,6" />
+                                    <Setter Property="FontSize" Value="11" />
+                                    <Setter Property="FontFamily" Value="Segoe UI" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                    <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                                    <Setter Property="BorderThickness" Value="0,0,0,1" />
+                                </Style>
+                            </DataGrid.ColumnHeaderStyle>
+                            <DataGrid.CellStyle>
+                                <Style TargetType="DataGridCell">
+                                    <Setter Property="Padding" Value="8,4" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="DataGridCell">
+                                                <Border Padding="{TemplateBinding Padding}"
+                                                        Background="{TemplateBinding Background}">
+                                                    <ContentPresenter VerticalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter Property="Background" Value="#E0EEFF" />
+                                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.CellStyle>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Destination" Binding="{Binding DisplayDestination}" Width="140" />
+                                <DataGridTextColumn Header="Gateway" Binding="{Binding Gateway}" Width="130" />
+                                <DataGridTextColumn Header="Interface" Binding="{Binding InterfaceName}" Width="120" />
+                                <DataGridTextColumn Header="Metric" Binding="{Binding Metric}" Width="60" />
+                                <DataGridTextColumn Header="Type" Binding="{Binding RouteType}" Width="80" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </TabItem>
+
+            <!-- Firewall Tab -->
+            <TabItem Header="Firewall">
+                <Border Background="{StaticResource CardBrush}"
+                        CornerRadius="0,0,8,8"
+                        Padding="12">
+                    <Border.Effect>
+                        <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.1" />
+                    </Border.Effect>
+                    <StackPanel>
+                        <TextBlock Text="Windows Firewall"
+                                   FontSize="14" FontWeight="Medium"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   Margin="0,0,0,12" />
+                        <ItemsControl x:Name="FirewallList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="12,10"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="0,0,0,1">
+                                        <DockPanel>
+                                            <CheckBox DockPanel.Dock="Right"
+                                                      IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                                      Style="{StaticResource ToggleSwitchStyle}"
+                                                      VerticalAlignment="Center"
+                                                      Click="ToggleFirewall_Click"
+                                                      Tag="{Binding ProfileKey}" />
+                                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                                <DockPanel>
+                                                    <Ellipse Width="8" Height="8"
+                                                             Margin="0,0,8,0"
+                                                             VerticalAlignment="Center">
+                                                        <Ellipse.Style>
+                                                            <Style TargetType="Ellipse">
+                                                                <Setter Property="Fill" Value="{StaticResource DisabledBrush}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsEnabled}" Value="True">
+                                                                        <Setter Property="Fill" Value="{StaticResource EnabledBrush}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Ellipse.Style>
+                                                    </Ellipse>
+                                                    <TextBlock FontSize="14" FontWeight="Medium"
+                                                               Foreground="{StaticResource TextPrimaryBrush}">
+                                                        <TextBlock.Text>
+                                                            <MultiBinding StringFormat="{}{0}  ·  {1}">
+                                                                <Binding Path="Name" />
+                                                                <Binding Path="Status" />
+                                                            </MultiBinding>
+                                                        </TextBlock.Text>
+                                                    </TextBlock>
+                                                </DockPanel>
+                                                <TextBlock Text="{Binding Description}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Margin="16,3,0,0" />
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </TabItem>
+        </TabControl>
 
         <!-- Status bar -->
         <Border Grid.Row="3"
