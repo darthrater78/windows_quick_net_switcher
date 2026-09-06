@@ -23,8 +23,11 @@ jobs:
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
-      - name: Upload artifact
+      - name: Publish single-file exe
+        run: dotnet publish QuickNetSwitcher/QuickNetSwitcher.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+
+      - name: Upload exe
         uses: actions/upload-artifact@v4
         with:
-          name: QuickNetSwitcher-build
-          path: QuickNetSwitcher/bin/Release/net8.0-windows/
+          name: QuickNetSwitcher
+          path: publish/QuickNetSwitcher.exe
