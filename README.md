@@ -29,6 +29,13 @@ Download the latest release from the [Releases page](https://github.com/darthrat
 - Windows 10 or Windows 11
 - Administrator privileges (the app requests elevation on launch)
 
+## Download Size
+
+The release exe is ~60–150 MB because it is published as a **self-contained
+single-file** binary — the entire .NET 8 runtime is bundled so you don't need
+to install .NET on the target machine. No installer required: just download,
+right-click, and run as administrator.
+
 ## Building from Source
 
 ### Prerequisites

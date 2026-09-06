@@ -38,7 +38,7 @@ public static class RouteTableService
 
             var cidr = !string.IsNullOrEmpty(mask) ? $"/{MaskToCidr(mask)}" : "";
 
-            ifNameMap.TryGetValue(ifIndex, out var ifInfo);
+            var hasIf = ifNameMap.TryGetValue(ifIndex, out var ifInfo);
 
             var routeType = ClassifyRoute(dest, mask, nextHop);
 
@@ -47,8 +47,8 @@ public static class RouteTableService
                 Destination = dest,
                 Cidr = cidr,
                 Gateway = nextHop,
-                InterfaceIp = ifInfo?.Ip ?? "",
-                InterfaceName = ifInfo?.Name ?? $"IF {ifIndex}",
+                InterfaceIp = hasIf ? ifInfo.Ip : "",
+                InterfaceName = hasIf ? ifInfo.Name : $"IF {ifIndex}",
                 Metric = metric,
                 RouteType = routeType
             });
