@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management;
-using System.Net.NetworkInformation;
 
 namespace QuickNetSwitcher;
 
@@ -24,12 +23,11 @@ public static class NetworkAdapterService
         using var searcher = new ManagementObjectSearcher(
             "SELECT * FROM Win32_NetworkAdapter WHERE PhysicalAdapter = True");
 
-        var dotnetAdapters = NetworkInterface.GetAllNetworkInterfaces()
-            .ToDictionary(n => n.Description, n => n, StringComparer.OrdinalIgnoreCase);
-
         foreach (ManagementObject obj in searcher.Get())
         {
-            var name = obj["Name"]?.ToString() ?? "Unknown";
+            var connectionId = obj["NetConnectionID"]?.ToString();
+            var hardwareName = obj["Name"]?.ToString() ?? "Unknown";
+            var name = !string.IsNullOrEmpty(connectionId) ? connectionId : hardwareName;
             var description = obj["Description"]?.ToString() ?? "";
             var adapterId = obj["DeviceID"]?.ToString() ?? "";
             var adapterType = obj["AdapterType"]?.ToString() ?? "Unknown";
@@ -37,23 +35,44 @@ public static class NetworkAdapterService
             bool isEnabled = netEnabled != null && (bool)netEnabled;
             var mac = obj["MACAddress"]?.ToString() ?? "";
 
+            var statusCode = obj["NetConnectionStatus"];
             var status = "Disabled";
             var speed = "";
 
-            if (isEnabled && dotnetAdapters.TryGetValue(description, out var ni))
+            if (isEnabled && statusCode != null)
             {
-                status = ni.OperationalStatus switch
+                status = Convert.ToInt32(statusCode) switch
                 {
-                    OperationalStatus.Up => "Connected",
-                    OperationalStatus.Down => "Disconnected",
-                    _ => ni.OperationalStatus.ToString()
+                    0 => "Disconnected",
+                    1 => "Connecting",
+                    2 => "Connected",
+                    3 => "Disconnecting",
+                    4 => "Hardware not present",
+                    5 => "Hardware disabled",
+                    6 => "Hardware malfunction",
+                    7 => "Media disconnected",
+                    8 => "Authenticating",
+                    9 => "Authentication succeeded",
+                    10 => "Authentication failed",
+                    11 => "Invalid address",
+                    12 => "Credentials required",
+                    _ => "Unknown"
                 };
+            }
+            else if (!isEnabled)
+            {
+                status = "Disabled";
+            }
 
-                if (ni.OperationalStatus == OperationalStatus.Up && ni.Speed > 0)
+            if (isEnabled && statusCode != null && Convert.ToInt32(statusCode) == 2)
+            {
+                var adapterSpeed = obj["Speed"];
+                if (adapterSpeed != null)
                 {
-                    speed = ni.Speed >= 1_000_000_000
-                        ? $"{ni.Speed / 1_000_000_000.0:F1} Gbps"
-                        : $"{ni.Speed / 1_000_000.0:F0} Mbps";
+                    long speedBps = Convert.ToInt64(adapterSpeed);
+                    speed = speedBps >= 1_000_000_000
+                        ? $"{speedBps / 1_000_000_000.0:F1} Gbps"
+                        : $"{speedBps / 1_000_000.0:F0} Mbps";
                 }
             }
 

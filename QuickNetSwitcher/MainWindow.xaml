@@ -127,7 +127,7 @@
                                                 <TextBlock.Text>
                                                     <MultiBinding StringFormat="{}{0}  ·  {1}">
                                                         <Binding Path="Status" />
-                                                        <Binding Path="NetworkAdapterType" />
+                                                        <Binding Path="Description" />
                                                     </MultiBinding>
                                                 </TextBlock.Text>
                                             </TextBlock>
