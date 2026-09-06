@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -13,6 +14,7 @@ namespace QuickNetSwitcher;
 public partial class MainWindow : Window
 {
     private WinForms.NotifyIcon? _trayIcon;
+    private List<RouteEntry> _allRoutes = new();
 
     public MainWindow()
     {
@@ -29,14 +31,13 @@ public partial class MainWindow : Window
             Visible = true
         };
 
-        // Use a generated icon since we can't embed .ico in this environment
         _trayIcon.Icon = CreateTrayIcon();
 
         _trayIcon.DoubleClick += (_, _) => ShowFromTray();
 
         var contextMenu = new WinForms.ContextMenuStrip();
         contextMenu.Items.Add("Show", null, (_, _) => ShowFromTray());
-        contextMenu.Items.Add("Refresh", null, (_, _) => LoadAdapters());
+        contextMenu.Items.Add("Refresh", null, (_, _) => RefreshCurrentTab());
         contextMenu.Items.Add("-");
         contextMenu.Items.Add("Exit", null, (_, _) =>
         {
@@ -57,7 +58,6 @@ public partial class MainWindow : Window
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         using var brush = new SolidBrush(Color.FromArgb(0, 120, 212));
         g.FillEllipse(brush, 2, 2, 28, 28);
-        // Draw a simple network icon (two arrows)
         using var pen = new Pen(Color.White, 2.5f);
         g.DrawLine(pen, 10, 16, 22, 10);
         g.DrawLine(pen, 22, 10, 18, 10);
@@ -74,6 +74,14 @@ public partial class MainWindow : Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
+    }
+
+    private void RefreshCurrentTab()
+    {
+        if (MainTabs.SelectedIndex == 1)
+            LoadRoutes();
+        else
+            LoadAdapters();
     }
 
     private void LoadAdapters()
@@ -95,6 +103,38 @@ public partial class MainWindow : Window
         }
     }
 
+    private void LoadRoutes()
+    {
+        try
+        {
+            StatusText.Text = "Loading route table...";
+            _allRoutes = RouteTableService.GetRoutes();
+            ApplyRouteFilter();
+            StatusText.Text = $"{_allRoutes.Count} routes loaded";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Error: {ex.Message}";
+        }
+    }
+
+    private void ApplyRouteFilter()
+    {
+        var visible = _allRoutes.Where(r =>
+        {
+            return r.RouteType switch
+            {
+                "Default" => ShowDefaultRoutes.IsChecked == true,
+                "Remote" => ShowRemoteRoutes.IsChecked == true,
+                "Local" => ShowLocalRoutes.IsChecked == true,
+                _ => ShowOtherRoutes.IsChecked == true
+            };
+        }).ToList();
+
+        RouteGrid.ItemsSource = visible;
+        StatusText.Text = $"Showing {visible.Count} of {_allRoutes.Count} routes";
+    }
+
     private async void ToggleAdapter_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not CheckBox toggle || toggle.Tag is not string adapterId)
@@ -102,7 +142,7 @@ public partial class MainWindow : Window
 
         var enable = toggle.IsChecked == true;
         var action = enable ? "Enabling" : "Disabling";
-        var adapter = (AdapterList.ItemsSource as System.Collections.Generic.List<AdapterViewModel>)?
+        var adapter = (AdapterList.ItemsSource as List<AdapterViewModel>)?
             .FirstOrDefault(a => a.AdapterId == adapterId);
         var name = adapter?.Name ?? adapterId;
 
@@ -137,16 +177,54 @@ public partial class MainWindow : Window
         }
     }
 
-    private void AdapterItem_Click(object sender, MouseButtonEventArgs e)
+    private async void EditMetric_Click(object sender, RoutedEventArgs e)
     {
-        // Don't interfere with toggle clicks
-        if (e.OriginalSource is System.Windows.Shapes.Ellipse)
+        if (sender is not Button btn || btn.Tag is not AdapterViewModel adapter)
             return;
+
+        var dialog = new MetricDialog(adapter.Name, adapter.InterfaceMetric)
+        {
+            Owner = this
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            var newMetric = dialog.MetricValue;
+            StatusText.Text = $"Setting {adapter.Name} metric to {newMetric}...";
+
+            var success = await Task.Run(() =>
+                NetworkAdapterService.SetInterfaceMetric(adapter.Name, newMetric));
+
+            if (success)
+            {
+                StatusText.Text = $"{adapter.Name} metric set to {newMetric}";
+                await Task.Delay(300);
+                LoadAdapters();
+            }
+            else
+            {
+                StatusText.Text = $"Failed to set metric for {adapter.Name}";
+            }
+        }
     }
 
     private void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
-        LoadAdapters();
+        RefreshCurrentTab();
+    }
+
+    private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+
+        if (MainTabs.SelectedIndex == 1 && _allRoutes.Count == 0)
+            LoadRoutes();
+    }
+
+    private void RouteFilter_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _allRoutes.Count == 0) return;
+        ApplyRouteFilter();
     }
 
     private void Window_StateChanged(object sender, EventArgs e)
