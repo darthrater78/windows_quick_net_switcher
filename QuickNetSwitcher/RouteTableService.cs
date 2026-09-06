@@ -99,13 +99,13 @@ public static class RouteTableService
         }
 
         using var adapterSearcher = new ManagementObjectSearcher(
-            "SELECT DeviceID, NetConnectionID FROM Win32_NetworkAdapter WHERE NetConnectionID IS NOT NULL");
+            "SELECT InterfaceIndex, NetConnectionID FROM Win32_NetworkAdapter WHERE NetConnectionID IS NOT NULL");
         foreach (ManagementObject obj in adapterSearcher.Get())
         {
-            var devId = obj["DeviceID"]?.ToString() ?? "";
+            var ifIdx = obj["InterfaceIndex"]?.ToString() ?? "";
             var connId = obj["NetConnectionID"]?.ToString();
-            if (!string.IsNullOrEmpty(connId) && map.ContainsKey(devId))
-                map[devId] = (map[devId].Ip, connId);
+            if (!string.IsNullOrEmpty(connId) && map.ContainsKey(ifIdx))
+                map[ifIdx] = (map[ifIdx].Ip, connId);
         }
 
         return map;

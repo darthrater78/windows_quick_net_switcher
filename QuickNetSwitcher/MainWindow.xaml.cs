@@ -27,6 +27,14 @@ public partial class MainWindow : Window
         SetupTrayIcon();
         AdapterList.ItemsSource = _adapters;
         LoadAdapters();
+
+        Loaded += (_, _) =>
+        {
+            Activate();
+            Topmost = true;
+            Topmost = false;
+            Focus();
+        };
     }
 
     private void SetupTrayIcon()
