@@ -86,26 +86,28 @@ public static class RouteTableService
     {
         var map = new Dictionary<string, (string Ip, string Name)>();
 
-        using var searcher = new ManagementObjectSearcher(
-            "SELECT InterfaceIndex, IPAddress, Description FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = True");
-
-        foreach (ManagementObject obj in searcher.Get())
-        {
-            var index = obj["InterfaceIndex"]?.ToString() ?? "";
-            var ips = obj["IPAddress"] as string[];
-            var desc = obj["Description"]?.ToString() ?? "";
-            if (!string.IsNullOrEmpty(index) && ips is { Length: > 0 })
-                map[index] = (ips[0], desc);
-        }
-
         using var adapterSearcher = new ManagementObjectSearcher(
-            "SELECT InterfaceIndex, NetConnectionID FROM Win32_NetworkAdapter WHERE NetConnectionID IS NOT NULL");
+            "SELECT InterfaceIndex, NetConnectionID, Name FROM Win32_NetworkAdapter");
         foreach (ManagementObject obj in adapterSearcher.Get())
         {
             var ifIdx = obj["InterfaceIndex"]?.ToString() ?? "";
+            if (string.IsNullOrEmpty(ifIdx)) continue;
             var connId = obj["NetConnectionID"]?.ToString();
-            if (!string.IsNullOrEmpty(connId) && map.ContainsKey(ifIdx))
-                map[ifIdx] = (map[ifIdx].Ip, connId);
+            var hwName = obj["Name"]?.ToString() ?? "";
+            map[ifIdx] = ("", !string.IsNullOrEmpty(connId) ? connId : hwName);
+        }
+
+        using var cfgSearcher = new ManagementObjectSearcher(
+            "SELECT InterfaceIndex, IPAddress FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = True");
+        foreach (ManagementObject obj in cfgSearcher.Get())
+        {
+            var index = obj["InterfaceIndex"]?.ToString() ?? "";
+            var ips = obj["IPAddress"] as string[];
+            if (!string.IsNullOrEmpty(index) && ips is { Length: > 0 })
+            {
+                var name = map.TryGetValue(index, out var existing) ? existing.Name : "";
+                map[index] = (ips[0], name);
+            }
         }
 
         return map;

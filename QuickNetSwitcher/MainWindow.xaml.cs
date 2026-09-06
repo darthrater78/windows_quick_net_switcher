@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private ObservableCollection<AdapterViewModel> _adapters = new();
     private System.Windows.Point _dragStartPoint;
     private bool _isDragging;
+    private bool _firewallLoaded;
 
     public MainWindow()
     {
@@ -30,10 +31,13 @@ public partial class MainWindow : Window
 
         Loaded += (_, _) =>
         {
-            Activate();
-            Topmost = true;
-            Topmost = false;
-            Focus();
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () =>
+            {
+                WindowState = WindowState.Normal;
+                Show();
+                Activate();
+                Focus();
+            });
         };
     }
 
@@ -92,10 +96,12 @@ public partial class MainWindow : Window
 
     private void RefreshCurrentTab()
     {
-        if (MainTabs.SelectedIndex == 1)
-            LoadRoutes();
-        else
-            LoadAdapters();
+        switch (MainTabs.SelectedIndex)
+        {
+            case 1: LoadRoutes(); break;
+            case 2: LoadFirewall(); break;
+            default: LoadAdapters(); break;
+        }
     }
 
     private void LoadAdapters()
@@ -157,6 +163,65 @@ public partial class MainWindow : Window
 
         RouteGrid.ItemsSource = visible;
         StatusText.Text = $"Showing {visible.Count} of {_allRoutes.Count} routes";
+    }
+
+    private void LoadFirewall()
+    {
+        try
+        {
+            StatusText.Text = "Loading firewall status...";
+            var profiles = FirewallService.GetProfiles()
+                .Select(FirewallViewModel.FromProfile)
+                .ToList();
+            FirewallList.ItemsSource = profiles;
+            _firewallLoaded = true;
+
+            var onCount = profiles.Count(p => p.IsEnabled);
+            StatusText.Text = $"{profiles.Count} firewall profiles  ·  {onCount} enabled";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Error: {ex.Message}";
+        }
+    }
+
+    private async void ToggleFirewall_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox toggle || toggle.Tag is not string profileKey)
+            return;
+
+        var enable = toggle.IsChecked == true;
+        var action = enable ? "Enabling" : "Disabling";
+
+        StatusText.Text = $"{action} {profileKey} firewall...";
+        toggle.IsEnabled = false;
+
+        try
+        {
+            var success = await Task.Run(() =>
+                FirewallService.SetProfileState(profileKey, enable));
+
+            if (success)
+            {
+                StatusText.Text = $"{profileKey} firewall {(enable ? "enabled" : "disabled")}";
+                await Task.Delay(300);
+                LoadFirewall();
+            }
+            else
+            {
+                StatusText.Text = $"Failed to {action.ToLower()} {profileKey} firewall";
+                toggle.IsChecked = !enable;
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Error: {ex.Message}";
+            toggle.IsChecked = !enable;
+        }
+        finally
+        {
+            toggle.IsEnabled = true;
+        }
     }
 
     private async void ToggleAdapter_Click(object sender, RoutedEventArgs e)
@@ -242,6 +307,8 @@ public partial class MainWindow : Window
 
         if (MainTabs.SelectedIndex == 1 && _allRoutes.Count == 0)
             LoadRoutes();
+        else if (MainTabs.SelectedIndex == 2 && !_firewallLoaded)
+            LoadFirewall();
     }
 
     private void RouteFilter_Changed(object sender, RoutedEventArgs e)

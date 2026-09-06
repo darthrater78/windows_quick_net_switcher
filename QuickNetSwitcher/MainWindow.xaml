@@ -314,6 +314,72 @@
                     </Grid>
                 </Border>
             </TabItem>
+
+            <!-- Firewall Tab -->
+            <TabItem Header="Firewall">
+                <Border Background="{StaticResource CardBrush}"
+                        CornerRadius="0,0,8,8"
+                        Padding="12">
+                    <Border.Effect>
+                        <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.1" />
+                    </Border.Effect>
+                    <StackPanel>
+                        <TextBlock Text="Windows Firewall"
+                                   FontSize="14" FontWeight="Medium"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   Margin="0,0,0,12" />
+                        <ItemsControl x:Name="FirewallList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="12,10"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="0,0,0,1">
+                                        <DockPanel>
+                                            <CheckBox DockPanel.Dock="Right"
+                                                      IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                                      Style="{StaticResource ToggleSwitchStyle}"
+                                                      VerticalAlignment="Center"
+                                                      Click="ToggleFirewall_Click"
+                                                      Tag="{Binding ProfileKey}" />
+                                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                                <DockPanel>
+                                                    <Ellipse Width="8" Height="8"
+                                                             Margin="0,0,8,0"
+                                                             VerticalAlignment="Center">
+                                                        <Ellipse.Style>
+                                                            <Style TargetType="Ellipse">
+                                                                <Setter Property="Fill" Value="{StaticResource DisabledBrush}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsEnabled}" Value="True">
+                                                                        <Setter Property="Fill" Value="{StaticResource EnabledBrush}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Ellipse.Style>
+                                                    </Ellipse>
+                                                    <TextBlock FontSize="14" FontWeight="Medium"
+                                                               Foreground="{StaticResource TextPrimaryBrush}">
+                                                        <TextBlock.Text>
+                                                            <MultiBinding StringFormat="{}{0}  ·  {1}">
+                                                                <Binding Path="Name" />
+                                                                <Binding Path="Status" />
+                                                            </MultiBinding>
+                                                        </TextBlock.Text>
+                                                    </TextBlock>
+                                                </DockPanel>
+                                                <TextBlock Text="{Binding Description}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Margin="16,3,0,0" />
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </TabItem>
         </TabControl>
 
         <!-- Status bar -->
