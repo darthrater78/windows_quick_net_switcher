@@ -166,7 +166,7 @@ public static class NetworkAdapterService
 
         var psi = new ProcessStartInfo
         {
-            FileName = "netsh",
+            FileName = SystemPaths.Netsh,
             Arguments = $"interface ipv4 set interface \"{interfaceAlias}\" metric={metric}",
             UseShellExecute = false,
             CreateNoWindow = true,

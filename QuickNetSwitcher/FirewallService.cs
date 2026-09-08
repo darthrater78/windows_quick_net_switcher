@@ -46,7 +46,7 @@ public static class FirewallService
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "netsh",
+            FileName = SystemPaths.Netsh,
             Arguments = arguments,
             UseShellExecute = false,
             CreateNoWindow = true,
