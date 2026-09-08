@@ -102,6 +102,13 @@ All three `Process.Start` calls set `UseShellExecute = false`, so arguments are
 passed directly to the target process — no shell is involved and no shell
 metacharacters are interpreted.
 
+The executables themselves are launched by **absolute path**, resolved once in
+`SystemPaths.cs`, rather than by bare name. This matters because `CreateProcess`
+searches the calling application's own directory before `System32`: a bare
+`netsh` would run an attacker-planted `netsh.exe` sitting beside the app — with
+administrator rights, since the process is elevated. Resolving from the Windows
+directory, which only administrators can write to, removes that path.
+
 ### What the app does not do
 
 - **No network I/O.** There is no HTTP client, socket, or listener anywhere in
@@ -134,13 +141,6 @@ Stated plainly rather than left for you to discover:
   signature, so SmartScreen will warn on first run. Download only from the
   [official releases page](https://github.com/darthrater78/windows_quick_net_switcher/releases),
   and treat a copy from anywhere else as untrusted.
-- **Helper executables are resolved by name, not absolute path.** `netsh` and
-  `explorer.exe` are launched as bare names, and Windows searches the
-  application's own directory before the system directories. If someone can
-  write to the folder the `.exe` runs from, they could place a `netsh.exe`
-  beside it that would then run elevated. Keep the app in a directory only
-  administrators can write to (`C:\Program Files\...`) rather than running it
-  out of `Downloads`.
 - **Firewall status parsing is English-only.** Profile detection matches the
   literal strings `Domain Profile` / `Private Profile` / `Public Profile` and
   `State` in `netsh` output, and a failed toggle is detected by looking for the
@@ -222,6 +222,7 @@ QuickNetSwitcher.sln
     ├── DesktopPinService.cs        user32 interop for the desktop-layer pin
     ├── SettingsService.cs          settings.json load/save
     ├── AdapterOrderService.cs      adapter_order.json load/save, order application
+    ├── SystemPaths.cs              Absolute paths to netsh.exe and explorer.exe
     │
     ├── AdapterViewModel.cs         Display model for an adapter row
     └── FirewallViewModel.cs        Display model for a firewall profile row
@@ -268,6 +269,12 @@ on refresh.
 
 ## Version History
 
+### v1.2.1 — 2026-09-08
+- Security: `netsh` and `explorer.exe` are now launched by absolute path instead of by bare name. Windows searches the application's own directory before `System32`, so a `netsh.exe` planted beside the app would previously have been run with administrator rights — a privilege escalation path for anything already running as the user. Paths are resolved once in the new `SystemPaths` helper
+- Documentation: new Security Model section covering why the app needs administrator rights, the scope of elevation, how input is constrained at each privileged boundary, local state, and known limitations
+- Documentation: new Architecture section covering project layout, layering, threading, and current gaps
+- Corrected the How It Works description of the metric change: it uses `netsh interface ipv4`, not `ipv4/ipv6`
+
 ### v1.2.0 — 2026-09-08
 - Status bar links to the project's GitHub page and to the running version's release notes
 - Release notes link is derived from the assembly version, so it always points at the build's own release
@@ -303,4 +310,4 @@ https://github.com/darthrater78/windows_quick_net_switcher
 
 ## Release Notes
 
-https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.2.0
+https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.2.1

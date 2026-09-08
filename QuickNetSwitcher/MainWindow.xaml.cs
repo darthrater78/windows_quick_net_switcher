@@ -392,7 +392,7 @@ public partial class MainWindow : Window
             // here would open the default browser as administrator too. Handing it to
             // explorer.exe instead delegates to the already-running user-level shell, so
             // the browser opens unelevated.
-            using var browser = Process.Start(new ProcessStartInfo("explorer.exe", url)
+            using var browser = Process.Start(new ProcessStartInfo(SystemPaths.Explorer, url)
             {
                 UseShellExecute = false
             });
