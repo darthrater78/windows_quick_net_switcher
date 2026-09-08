@@ -1,24 +1,28 @@
 # Dev Skills gate state
 Track: release sequence
 Version: 1.3.0
-Updated: 2026-09-08
+Updated: 2026-09-08 (theme + sizing work on top of green CI)
 Branch: claude/windows-registry-adapter-simple-view-xftg6g
 
 🔢 VERSION    ✅ csproj, app.manifest, MainWindow.xaml title, README release URL
               all at 1.3.0; v1.2.1 tagged on remote (previous release shipped);
               RepositoryUrl present; in-app release-notes link derives from the
               assembly version, so it follows automatically
-🔨 BUILD      🚫 cannot run here — no dotnet SDK, net8.0-windows WPF target,
-              Linux container. NOT N/A: the project has a real build system.
-              build.yml (windows-latest) on the PR is the first actual compile.
-              Do not mark ✅ until CI is green. Build-by-inspection notes below.
+🔨 BUILD      ⏳ was ✅ on f8ac987; theme + sizing changes since then are NOT
+              compiled. Re-verify on CI before this is ✅ again.
+              Prior pass: build.yml (windows-latest) succeeded on f8ac987 in 74s,
+              run 34278563923. This was the first ever compile of the branch:
+              no dotnet SDK in the session container (Linux, net8.0-windows WPF
+              target), so the pre-push pass was by inspection only (notes below).
+              Release artifact is still built by CI at tag time, not locally.
 🔒 SECURITY   ✅ 0 Critical, 0 High — net reduction in attack surface
 📄 DOCS       ✅ v1.3.0 changelog entry; new "Why there is no start with Windows"
               section; feature list, How It Works, local-state table, known
               limitations, architecture tree and layering notes all corrected
-📦 RELEASE    ⏳ first commit pushed (240229e); toolbar follow-up awaiting
-              approval, then PR
-🚀 SHIP       ⬜ merge + tag + CI publish. Tag push goes to the user (container
+📦 RELEASE    ⏳ PR #6 open — https://github.com/darthrater78/windows_quick_net_switcher/pull/6
+              commits 240229e + f8ac987; session subscribed to PR activity
+🚀 SHIP       ⬜ PR #6 is green and mergeable_state=clean. Remaining: merge,
+              then tag v1.3.0 to fire release.yml. Tag push goes to the user (container
               creds are commonly denied on refs/tags/*)
 
 ## What changed
@@ -60,6 +64,27 @@ Window_Closing all read them while collapsed.
 - MainWindow.xaml.cs       ApplySimpleView, SimpleView_Click
 - SettingsService.cs       SimpleView key
 
+**3. Dark theme + simple-view sizing (second round, user-requested).**
+Palette moved out of App.xaml into Themes/Light.xaml + Themes/Dark.xaml with an
+identical key set; ThemeService swaps slot 0 of the app's merged dictionaries and
+every colour reference became DynamicResource (a StaticResource binds once and
+would not follow the swap). Default follows AppsUseLightTheme; the toggle stores
+an explicit choice. WPF's stock TabItem/CheckBox/Button/ScrollBar chrome is
+painted light and cannot be recoloured through properties, so those are templated.
+Title bar via DwmSetWindowAttribute (OS-drawn, not WPF); tray menu coloured
+directly (Windows Forms, outside WPF resources).
+
+Simple view now sets SizeToContent=Height so the window fits the list instead of
+holding 580px -- that was the dead band under the last adapter. Scoped to the
+Adapters tab: the route table would measure every row and snap to screen height.
+
+- Themes/Light.xaml, Themes/Dark.xaml   (new)
+- ThemeService.cs                       (new)
+- App.xaml                              palette extracted, control templates added
+- MainWindow.xaml / .cs                 DynamicResource, Dark toggle, UpdateWindowSizing
+- MetricDialog.xaml                     DynamicResource
+- SettingsService.cs                    bool? DarkMode (null = follow Windows)
+
 ## Gate 3 detail
 
 Security: the change removes an attack path and adds none. The one new code
@@ -73,6 +98,10 @@ of any kind.
 Known trade-off, accepted: with the status bar hidden, a failed adapter toggle
 has no text to report to. The failure is still visible — the toggle snaps back,
 which `ToggleAdapter_Click` already does on both the failure and exception paths.
+
+Round 2 security: ThemeService reads one HKCU registry value and calls
+DwmSetWindowAttribute on our own window handle. No input, no process launch, no
+network, no new dependency. Theme choice cannot affect privileged behaviour.
 
 Quality: no deep nesting, no function over ~15 lines, no new allocation in a hot
 path. `ApplySimpleView` is O(adapters) and runs on user action only.

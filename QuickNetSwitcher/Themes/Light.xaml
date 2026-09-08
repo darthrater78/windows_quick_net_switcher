@@ -1,0 +1,40 @@
+<!--
+  Light palette. Dark.xaml defines the same key set; ThemeService swaps one for
+  the other at runtime, so every key here must exist there too or a DynamicResource
+  lookup will silently fall back to nothing.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Interactive accent. AccentBrush is for text and links (it must read against
+         Surface/Card); AccentFillBrush is for filled buttons and the toggle track,
+         and is paired with OnAccentBrush. Keeping them apart is what lets the dark
+         theme use a bright blue for links without putting white text on it. -->
+    <SolidColorBrush x:Key="AccentBrush" Color="#0078D4" />
+    <SolidColorBrush x:Key="AccentFillBrush" Color="#0078D4" />
+    <SolidColorBrush x:Key="OnAccentBrush" Color="#FFFFFF" />
+
+    <!-- Surfaces -->
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#F3F3F3" />
+    <SolidColorBrush x:Key="CardBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="AltRowBrush" Color="#F8F8F8" />
+    <SolidColorBrush x:Key="SelectionBrush" Color="#E0EEFF" />
+    <SolidColorBrush x:Key="HoverBrush" Color="#00000014" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#E0E0E0" />
+
+    <!-- Text -->
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A1A1A" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#616161" />
+
+    <!-- Input controls -->
+    <SolidColorBrush x:Key="ControlBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="ControlBorderBrush" Color="#CCCCCC" />
+    <SolidColorBrush x:Key="ScrollThumbBrush" Color="#C0C0C0" />
+
+    <!-- Status -->
+    <SolidColorBrush x:Key="EnabledBrush" Color="#0F7B0F" />
+    <SolidColorBrush x:Key="DisabledBrush" Color="#C42B1C" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#E08600" />
+    <SolidColorBrush x:Key="UnknownBrush" Color="#999999" />
+    <SolidColorBrush x:Key="ToggleOffBrush" Color="#CCCCCC" />
+</ResourceDictionary>

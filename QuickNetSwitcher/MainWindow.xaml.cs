@@ -20,6 +20,9 @@ public partial class MainWindow : Window
 {
     private const string RepositoryUrl = "https://github.com/darthrater78/windows_quick_net_switcher";
 
+    // The XAML MinHeight, restored when leaving simple view.
+    private const double DetailViewMinHeight = 450;
+
     private static string ReleaseNotesUrl
     {
         get
@@ -39,6 +42,7 @@ public partial class MainWindow : Window
     private bool _firewallLoaded;
     private AppSettings _settings = new();
     private bool _isPinnedToDesktop;
+    private double _detailViewHeight;
 
     public MainWindow()
     {
@@ -50,6 +54,9 @@ public partial class MainWindow : Window
 
         // "Start with Windows" was removed in v1.3.0; drop the value it left behind.
         _ = Task.Run(LegacyStartupCleanup.RemoveRunEntry);
+
+        // The caption is drawn by the OS, not WPF, and needs a handle to exist.
+        SourceInitialized += (_, _) => ThemeService.ApplyTitleBar(this);
 
         Loaded += (_, _) =>
         {
@@ -69,6 +76,13 @@ public partial class MainWindow : Window
     private void LoadSettings()
     {
         _settings = SettingsService.Load();
+
+        // No explicit choice yet means follow Windows.
+        var dark = _settings.DarkMode ?? ThemeService.WindowsPrefersDark();
+        ThemeService.Apply(dark);
+        DarkModeCheckBox.IsChecked = dark;
+        ApplyTrayMenuTheme();
+
         MinimizeToTrayCheckBox.IsChecked = _settings.MinimizeToTray;
         PinToDesktopCheckBox.IsChecked = _settings.PinToDesktop;
         SimpleViewCheckBox.IsChecked = _settings.SimpleView;
@@ -108,6 +122,44 @@ public partial class MainWindow : Window
         StatusText.Text = pin ? "Pinned to desktop" : "Unpinned from desktop";
     }
 
+    private void DarkMode_Click(object sender, RoutedEventArgs e)
+    {
+        var dark = DarkModeCheckBox.IsChecked == true;
+        ThemeService.Apply(dark);
+        ApplyTrayMenuTheme();
+
+        // Clicking it is what makes the choice explicit; until now the setting was
+        // null and tracked the Windows theme.
+        _settings.DarkMode = dark;
+        SaveSettings();
+        StatusText.Text = dark ? "Dark theme" : "Light theme";
+    }
+
+    // The tray menu is Windows Forms, outside WPF's resource system entirely, so it
+    // keeps a bright popup unless it is coloured by hand. The stock renderer paints
+    // its own background over BackColor; the system renderer honours it.
+    private void ApplyTrayMenuTheme()
+    {
+        if (_trayIcon?.ContextMenuStrip is not { } menu) return;
+
+        var dark = ThemeService.IsDark;
+        menu.RenderMode = dark
+            ? WinForms.ToolStripRenderMode.System
+            : WinForms.ToolStripRenderMode.ManagerRenderMode;
+        menu.BackColor = dark
+            ? System.Drawing.Color.FromArgb(43, 43, 43)
+            : System.Drawing.SystemColors.Menu;
+        menu.ForeColor = dark
+            ? System.Drawing.Color.FromArgb(240, 240, 240)
+            : System.Drawing.SystemColors.MenuText;
+
+        foreach (WinForms.ToolStripItem item in menu.Items)
+        {
+            item.BackColor = menu.BackColor;
+            item.ForeColor = menu.ForeColor;
+        }
+    }
+
     private void SimpleView_Click(object sender, RoutedEventArgs e)
     {
         ApplySimpleView(SimpleViewCheckBox.IsChecked == true);
@@ -115,8 +167,8 @@ public partial class MainWindow : Window
     }
 
     // Simple view strips the window back to what it is for: a list of connection names
-    // and their toggles. Header, status bar and the two settings checkboxes all go;
-    // the simple-view checkbox itself has to stay, since it is the way back out.
+    // and their toggles. Header, status bar and the other three settings checkboxes
+    // all go; the simple-view checkbox itself has to stay, since it is the way out.
     //
     // The hidden checkboxes keep their IsChecked state, so minimize-to-tray and
     // pin-to-desktop go on behaving exactly as they did -- SaveSettings, the window
@@ -128,9 +180,42 @@ public partial class MainWindow : Window
         StatusBar.Visibility = chrome;
         MinimizeToTrayCheckBox.Visibility = chrome;
         PinToDesktopCheckBox.Visibility = chrome;
+        DarkModeCheckBox.Visibility = chrome;
 
         foreach (var adapter in _adapters)
             adapter.SimpleView = simple;
+
+        UpdateWindowSizing();
+    }
+
+    // The adapter list sits in a star-sized row, so the window holds its full height
+    // whatever the content needs. Simple view rows are a third as tall, which left a
+    // dead band of empty card below the last adapter; sizing to content removes it.
+    // MinHeight has to drop first, or the shrink floors at the XAML minimum, and
+    // MaxHeight has to be capped, or a long adapter list grows past the screen.
+    //
+    // Only the adapter list is measured this way. The route table would size to every
+    // row it holds and snap the window to the full screen height, so the other tabs
+    // keep the fixed height.
+    private void UpdateWindowSizing()
+    {
+        if (SimpleViewCheckBox.IsChecked == true && MainTabs.SelectedIndex == 0)
+        {
+            if (SizeToContent == SizeToContent.Manual)
+                _detailViewHeight = ActualHeight > 0 ? ActualHeight : Height;
+
+            MinHeight = 0;
+            MaxHeight = SystemParameters.WorkArea.Height;
+            SizeToContent = SizeToContent.Height;
+            return;
+        }
+
+        SizeToContent = SizeToContent.Manual;
+        MinHeight = DetailViewMinHeight;
+        MaxHeight = double.PositiveInfinity;
+
+        if (_detailViewHeight > 0)
+            Height = _detailViewHeight;
     }
 
     private void SettingCheckBox_Click(object sender, RoutedEventArgs e)
@@ -377,6 +462,7 @@ public partial class MainWindow : Window
         {
             Owner = this
         };
+        dialog.SourceInitialized += (_, _) => ThemeService.ApplyTitleBar(dialog);
 
         if (dialog.ShowDialog() == true)
         {
@@ -430,6 +516,8 @@ public partial class MainWindow : Window
     private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;
+
+        UpdateWindowSizing();
 
         if (MainTabs.SelectedIndex == 1 && _allRoutes.Count == 0)
             LoadRoutes();

@@ -6,7 +6,7 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
-        Background="{StaticResource SurfaceBrush}">
+        Background="{DynamicResource SurfaceBrush}">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -17,14 +17,14 @@
 
         <TextBlock Grid.Row="0" x:Name="AdapterLabel"
                    FontSize="14" FontWeight="Medium"
-                   Foreground="{StaticResource TextPrimaryBrush}"
+                   Foreground="{DynamicResource TextPrimaryBrush}"
                    TextTrimming="CharacterEllipsis" />
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">
             <TextBlock Text="Metric:"
                        VerticalAlignment="Center"
                        FontSize="13"
-                       Foreground="{StaticResource TextSecondaryBrush}"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
                        Margin="0,0,10,0" />
             <TextBox x:Name="MetricInput"
                      Width="100" FontSize="14" FontFamily="Consolas"
@@ -33,7 +33,7 @@
             <TextBlock Text="(1–9999)"
                        VerticalAlignment="Center"
                        FontSize="11"
-                       Foreground="{StaticResource TextSecondaryBrush}"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
                        Margin="8,0,0,0" />
         </StackPanel>
 
@@ -41,7 +41,7 @@
                     HorizontalAlignment="Right">
             <Button Content="Cancel" Padding="16,6" Margin="0,0,8,0"
                     IsCancel="True" Background="Transparent"
-                    BorderBrush="{StaticResource BorderBrush}" Cursor="Hand">
+                    BorderBrush="{DynamicResource BorderBrush}" Cursor="Hand">
                 <Button.Resources>
                     <Style TargetType="Border">
                         <Setter Property="CornerRadius" Value="4" />
@@ -50,8 +50,8 @@
             </Button>
             <Button Content="Apply" Padding="16,6"
                     Click="Apply_Click"
-                    Background="{StaticResource AccentBrush}"
-                    Foreground="White" BorderThickness="0" Cursor="Hand">
+                    Background="{DynamicResource AccentFillBrush}"
+                    Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0" Cursor="Hand">
                 <Button.Resources>
                     <Style TargetType="Border">
                         <Setter Property="CornerRadius" Value="4" />

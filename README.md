@@ -24,8 +24,9 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 **General**
 - System tray icon — minimize to tray and keep it running in the background
 - Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
-- Simple view — strip the window down to connection names and their toggles, hiding the header, the status bar and the other toolbar settings
-- Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, simple-view)
+- Simple view — strip the window down to connection names and their toggles, hiding the header, the status bar and the other toolbar settings. The window shrinks to fit the list rather than keeping its full height
+- Dark theme — follows the Windows app theme by default, with a toolbar toggle to override it. Both themes cover the window chrome, tabs, buttons, checkboxes, scrollbars, the route grid, the metric dialog, the title bar and the tray menu
+- Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, simple-view, and the theme once you pick one)
 - Custom app icon and Windows 11-inspired UI
 - Status bar links to the project on GitHub and to the running version's release notes
 - Runs as administrator (required to enable/disable adapters and change firewall/metric settings)
@@ -147,7 +148,7 @@ directory, which only administrators can write to, removes that path.
 
 | File | Contents |
 |---|---|
-| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Three booleans: minimize-to-tray, pin-to-desktop, simple-view |
+| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Three booleans (minimize-to-tray, pin-to-desktop, simple-view) and a nullable dark-mode flag, where null means "follow Windows" |
 | `%LOCALAPPDATA%\QuickNetSwitcher\adapter_order.json` | A list of adapter ID strings used for display order |
 
 Both are read with `System.Text.Json` into concrete types (`AppSettings` and
@@ -220,7 +221,8 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 - **Route Table:** WMI queries the system route table and resolves adapter indexes to friendly names for display.
 - **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`.
 - **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
-- **Simple view:** A flag on each `AdapterViewModel` collapses the status, address and DNS rows of the adapter template, leaving the name and its toggle. The header, the status bar and the minimize-to-tray and pin-to-desktop checkboxes are collapsed alongside them, leaving the simple-view checkbox and Refresh — the checkbox has to stay, since it is the way back out. Hidden checkboxes keep their state, so minimize-to-tray and pin-to-desktop go on behaving exactly as before.
+- **Simple view:** A flag on each `AdapterViewModel` collapses the status, address and DNS rows of the adapter template, leaving the name and its toggle. The header, the status bar and the other three settings checkboxes are collapsed alongside them, leaving the simple-view checkbox and Refresh — the checkbox has to stay, since it is the way back out. Hidden checkboxes keep their state, so the settings behind them go on behaving exactly as before. The window also switches to `SizeToContent="Height"` so it fits the list instead of holding its full height; this applies only on the Adapters tab, since the route table would measure to every row it holds.
+- **Theming:** Two `ResourceDictionary` palettes (`Themes/Light.xaml`, `Themes/Dark.xaml`) define the same key set, and `ThemeService` swaps one for the other in slot 0 of the application's merged dictionaries. Every colour is referenced with `DynamicResource`, so the swap propagates without rebuilding any window. The default comes from `AppsUseLightTheme` under `HKCU\...\Themes\Personalize`; clicking the toggle stores an explicit choice that stops following Windows. The title bar is darkened separately through `DwmSetWindowAttribute`, since the caption is drawn by the OS rather than WPF, and the tray menu is coloured by hand because Windows Forms sits outside WPF's resource system.
 - **Settings:** All toolbar toggles are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
 - **Status bar links:** URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
 - The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, metric, and firewall changes all require it.
@@ -234,6 +236,8 @@ A single WPF project with no external dependencies beyond `System.Management`
 QuickNetSwitcher.sln
 └── QuickNetSwitcher/
     ├── Properties/app.manifest     Elevation request (requireAdministrator)
+    ├── Themes/Light.xaml           Light palette
+    ├── Themes/Dark.xaml            Dark palette (same key set)
     ├── App.xaml / App.xaml.cs      Application entry point
     ├── MainWindow.xaml(.cs)        The single window: three tabs, tray icon, all event handling
     ├── MetricDialog.xaml(.cs)      Modal dialog for editing an interface metric
@@ -242,6 +246,7 @@ QuickNetSwitcher.sln
     ├── RouteTableService.cs        WMI route table query and interface-name resolution
     ├── FirewallService.cs          Firewall profile read/write via netsh advfirewall
     ├── LegacyStartupCleanup.cs     Removes the dead pre-1.3.0 Run key entry
+    ├── ThemeService.cs             Light/dark palette swap, title bar, OS theme lookup
     ├── DesktopPinService.cs        user32 interop for the desktop-layer pin
     ├── SettingsService.cs          settings.json load/save
     ├── AdapterOrderService.cs      adapter_order.json load/save, order application
@@ -298,7 +303,9 @@ on refresh.
 - Removed "Start with Windows". It never worked — the shell launches `HKCU\...\Run` entries unelevated, and this app is manifested `requireAdministrator`, so Windows discarded the entry at every logon without an error. The registry value was written and the app never started
 - It was removed rather than fixed: the mechanism that works is a scheduled task at `RunLevel=HighestAvailable`, which would start this process as administrator at every logon with no UAC prompt. Anyone able to overwrite the unsigned executable — trivial while it sits in `Downloads` — would get administrator on the next logon. See [Why there is no "start with Windows"](#why-there-is-no-start-with-windows)
 - The leftover `Run` value from v1.1.0–v1.2.1 is deleted on first run of this version
-- New "Simple view" toggle: collapses each adapter row to its connection name and toggle, and hides the header, the status bar and the minimize-to-tray and pin-to-desktop checkboxes — leaving the simple-view checkbox and Refresh. Hidden settings keep working; only their controls are out of the way. The setting is remembered between sessions
+- New "Simple view" toggle: collapses each adapter row to its connection name and toggle, and hides the header, the status bar and the other settings checkboxes — leaving the simple-view checkbox and Refresh. Hidden settings keep working; only their controls are out of the way. The window now shrinks to fit the list rather than keeping its full height, so there is no dead space below the last adapter
+- New dark theme, following the Windows app theme by default with a toolbar toggle to override it. WPF's stock chrome is painted for a light theme and cannot be recoloured through properties alone, so tabs, buttons, checkboxes and scrollbars are templated; the OS-drawn title bar is handled through `DwmSetWindowAttribute` and the Windows Forms tray menu is coloured directly. Contrast was checked against the surface each colour actually sits on rather than picked by eye
+- Both settings are remembered between sessions
 - Toolbar checkboxes now reflow instead of clipping when the window is narrow
 
 ### v1.2.1 — 2026-09-08

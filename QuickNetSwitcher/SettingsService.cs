@@ -10,6 +10,11 @@ public class AppSettings
     public bool PinToDesktop { get; set; } = true;
     public bool MinimizeToTray { get; set; } = true;
     public bool SimpleView { get; set; } = false;
+
+    // null means "follow the Windows app theme", which is the default until the
+    // user actually picks one. A plain bool could not express that: it would have
+    // to default to light and would silently override the OS setting.
+    public bool? DarkMode { get; set; }
 }
 
 public static class SettingsService
