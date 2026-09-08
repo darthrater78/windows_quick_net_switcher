@@ -5,7 +5,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <AssemblyTitle>Quick Net Switcher</AssemblyTitle>
     <Description>Quickly toggle network adapters on/off from the system tray</Description>
     <Company>darthrater78</Company>

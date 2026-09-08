@@ -1,20 +1,20 @@
 # Dev Skills gate state
-Track: work commit
-Version: 1.1.0 (unchanged — no release in this session)
+Track: release sequence
+Version: 1.2.0
 Updated: 2026-09-08
 
-🔢 VERSION    ⬜ not owed — work commit, no version bump
-🔨 BUILD      ⬜ not owed — cannot run: no dotnet SDK, Windows-only WPF target (CI compiles on push)
-🔒 SECURITY   ✅ re-review pass: 1 High found and fixed (elevated browser launch), 0 outstanding
-📄 DOCS       ⬜ not owed — work commit, no release
-📦 RELEASE    ⬜ not owed — work commit, no PR requested
-🚀 SHIP       ⬜ not owed — work commit, no release
+🔢 VERSION    ✅ csproj, app.manifest, MainWindow.xaml title, README all at 1.2.0; v1.1.0 tagged on remote
+🔨 BUILD      🚫 cannot run here — no dotnet SDK, Windows-only WPF target. Delegated to CI
+              (build.yml: windows-latest, Release build + single-file publish, runs on PR)
+🔒 SECURITY   ✅ 0 Critical, 0 High (1 High found and fixed on re-review: elevated browser launch)
+📄 DOCS       ✅ v1.2.0 changelog entry, feature listed, How It Works updated, release URL at v1.2.0
+📦 RELEASE    ⏳ PR being opened
+🚀 SHIP       ⬜ merge + tag + publish. Tag push goes to the user (container creds 403 on tag refs)
 
-## Security re-review notes (2026-09-08)
-- ⚠️ High (FIXED): `OpenUrl` used `ShellExecute` from a `requireAdministrator`
-  process, launching the default browser elevated. Now routed through
-  `explorer.exe`, which delegates to the user-level shell so the browser opens
-  unelevated.
-- First pass missed this — it checked `Process.Start` for argument injection
-  (none: URLs are compile-time constants) and did not consider the privilege
-  boundary created by the app manifest.
+## Notes
+- Gate 2 is NOT ✅ and NOT N/A: the project has a real build system, it simply
+  cannot run in this Linux container. The PR's CI build check is the first
+  actual compile. Do not mark ✅ until CI is green.
+- Security re-review: `OpenUrl` originally shell-executed the URL from a
+  `requireAdministrator` process, which would launch the browser elevated.
+  Now routed through `explorer.exe` to the user-level shell.

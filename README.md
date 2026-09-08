@@ -27,6 +27,7 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 - Start with Windows — optional auto-launch via registry Run key
 - Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, start-with-Windows)
 - Custom app icon and Windows 11-inspired UI
+- Status bar links to the project on GitHub and to the running version's release notes
 - Runs as administrator (required to enable/disable adapters and change firewall/metric settings)
 - Single-file self-contained executable — no .NET runtime install needed
 
@@ -91,9 +92,16 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 - **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
 - **Start with Windows:** Manages an `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` registry entry pointing to the app executable.
 - **Settings:** All toolbar toggles are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
+- **Status bar links:** URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
 - The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, metric, and firewall changes all require it.
 
 ## Version History
+
+### v1.2.0 — 2026-09-08
+- Status bar links to the project's GitHub page and to the running version's release notes
+- Release notes link is derived from the assembly version, so it always points at the build's own release
+- Links open unelevated — the app runs as administrator, so URLs are handed to the user-level shell rather than launching the browser with admin rights
+- App icon rebuilt at 16/24/32/48/64/128/256 px; it previously shipped a single 16x16 frame that Windows upscaled, making the desktop, taskbar and Start menu icon look blurry
 
 ### v1.1.0 — 2026-09-08
 - Pin to desktop — window sits on the desktop layer behind other apps (default on)
@@ -124,4 +132,4 @@ https://github.com/darthrater78/windows_quick_net_switcher
 
 ## Release Notes
 
-https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.1.0
+https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.2.0
