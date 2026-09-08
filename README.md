@@ -23,6 +23,9 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 
 **General**
 - System tray icon — minimize to tray and keep it running in the background
+- Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
+- Start with Windows — optional auto-launch via registry Run key
+- Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, start-with-Windows)
 - Custom app icon and Windows 11-inspired UI
 - Runs as administrator (required to enable/disable adapters and change firewall/metric settings)
 - Single-file self-contained executable — no .NET runtime install needed
@@ -80,9 +83,18 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 - **Adapters:** WMI (`Win32_NetworkAdapter`) discovers physical adapters and calls the `Enable()`/`Disable()` methods to toggle them. Adapter display order is persisted to a JSON file in `%LOCALAPPDATA%`. Interface metric is set via `netsh interface ipv4/ipv6 set interface`.
 - **Route Table:** WMI queries the system route table and resolves adapter indexes to friendly names for display.
 - **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`.
+- **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
+- **Start with Windows:** Manages an `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` registry entry pointing to the app executable.
+- **Settings:** All toolbar toggles are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
 - The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, metric, and firewall changes all require it.
 
 ## Version History
+
+### v1.1.0 — 2026-09-08
+- Pin to desktop — window sits on the desktop layer behind other apps (default on)
+- Start with Windows — optional auto-launch via HKCU Run registry key
+- Settings persistence — minimize-to-tray, pin-to-desktop, and start-with-Windows saved to JSON
+- All toolbar settings remembered between sessions
 
 ### v1.0.0 — 2026-09-06
 - Initial release
@@ -107,4 +119,4 @@ https://github.com/darthrater78/windows_quick_net_switcher
 
 ## Release Notes
 
-https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.0.0
+https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.1.0
