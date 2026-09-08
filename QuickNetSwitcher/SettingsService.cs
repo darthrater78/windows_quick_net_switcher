@@ -8,8 +8,8 @@ namespace QuickNetSwitcher;
 public class AppSettings
 {
     public bool PinToDesktop { get; set; } = true;
-    public bool StartWithWindows { get; set; } = false;
     public bool MinimizeToTray { get; set; } = true;
+    public bool SimpleView { get; set; } = false;
 }
 
 public static class SettingsService

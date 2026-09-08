@@ -1,6 +1,9 @@
+#nullable enable
+using System.ComponentModel;
+
 namespace QuickNetSwitcher;
 
-public class AdapterViewModel
+public class AdapterViewModel : INotifyPropertyChanged
 {
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
@@ -25,6 +28,34 @@ public class AdapterViewModel
     public bool HasMetric => InterfaceMetric > 0;
     public string MetricDisplay => InterfaceMetric > 0 ? $"metric {InterfaceMetric}" : "";
     public bool HasMac => !string.IsNullOrEmpty(MacAddress);
+
+    private bool _simpleView;
+
+    // Simple view strips the row back to the connection name and its toggle. The flag
+    // lives on the item rather than the window so the template binds to its own
+    // DataContext -- no RelativeSource walk out to the Window, and no extra converters.
+    public bool SimpleView
+    {
+        get => _simpleView;
+        set
+        {
+            if (_simpleView == value) return;
+            _simpleView = value;
+            Notify(nameof(SimpleView));
+            Notify(nameof(ShowDetails));
+            Notify(nameof(ShowIpRow));
+            Notify(nameof(ShowDnsRow));
+        }
+    }
+
+    public bool ShowDetails => !SimpleView;
+    public bool ShowIpRow => !SimpleView && HasIp;
+    public bool ShowDnsRow => !SimpleView && HasDnsSuffix;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Notify(string propertyName) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     public static AdapterViewModel FromInfo(AdapterInfo info) => new()
     {

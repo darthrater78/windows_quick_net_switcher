@@ -1,52 +1,90 @@
 # Dev Skills gate state
 Track: release sequence
-Version: 1.2.1
+Version: 1.3.0
 Updated: 2026-09-08
-Branch: claude/dev-skills-loading-m8hs6o
+Branch: claude/windows-registry-adapter-simple-view-xftg6g
 
 🔢 VERSION    ✅ csproj, app.manifest, MainWindow.xaml title, README release URL
-              all at 1.2.1; v1.2.0 tagged on remote (previous release shipped);
+              all at 1.3.0; v1.2.1 tagged on remote (previous release shipped);
               RepositoryUrl present; in-app release-notes link derives from the
               assembly version, so it follows automatically
 🔨 BUILD      🚫 cannot run here — no dotnet SDK, net8.0-windows WPF target,
               Linux container. NOT N/A: the project has a real build system.
               build.yml (windows-latest) on the PR is the first actual compile.
-              Do not mark ✅ until CI is green.
-🔒 SECURITY   ✅ 0 Critical, 0 High — see below
-📄 DOCS       ✅ v1.2.1 changelog entry; stale limitation bullet removed; Security
-              Model updated to describe absolute-path launching; Architecture
-              tree includes SystemPaths.cs
+              Do not mark ✅ until CI is green. Build-by-inspection notes below.
+🔒 SECURITY   ✅ 0 Critical, 0 High — net reduction in attack surface
+📄 DOCS       ✅ v1.3.0 changelog entry; new "Why there is no start with Windows"
+              section; feature list, How It Works, local-state table, known
+              limitations, architecture tree and layering notes all corrected
 📦 RELEASE    ⏳ awaiting commit approval, then PR
 🚀 SHIP       ⬜ merge + tag + CI publish. Tag push goes to the user (container
               creds are commonly denied on refs/tags/*)
 
 ## What changed
-Fixes a local privilege-escalation vector. netsh and explorer.exe were launched
-by bare name; CreateProcess searches the application's own directory before
-System32, so a planted netsh.exe beside the exe would run elevated. All three
-call sites now use absolute paths resolved once in the new SystemPaths.cs.
 
-- QuickNetSwitcher/SystemPaths.cs        (new) path resolution
-- NetworkAdapterService.cs:169           FileName = SystemPaths.Netsh
-- FirewallService.cs:49                  FileName = SystemPaths.Netsh
-- MainWindow.xaml.cs:395                 ProcessStartInfo(SystemPaths.Explorer, url)
+**1. "Start with Windows" removed (was broken, and unfixable safely).**
+The v1.1.0–v1.2.1 implementation wrote `HKCU\...\CurrentVersion\Run`. That can
+never work here: the shell launches Run entries unelevated, the app is manifested
+`requireAdministrator`, and UAC has no interactive desktop to prompt on during
+logon — Windows discards the entry silently. Hence "the registry entry does get
+created" and nothing starts.
+
+The working mechanism is a scheduled task at `RunLevel=HighestAvailable` with a
+logon trigger. That was implemented, reviewed, and then dropped on the user's
+call: it is a permanent silent elevation path. Task Scheduler would launch this
+process as administrator at every logon with no prompt, so anyone who can
+overwrite the exe — trivial while it sits in a non-admin-writable folder such as
+`Downloads`, which is the normal case for a portable single `.exe` — gets
+administrator on the next logon. No code signature makes the swap visible.
+
+- QuickNetSwitcher/StartupService.cs        (deleted)
+- QuickNetSwitcher/LegacyStartupCleanup.cs  (new) removes the dead Run value
+- MainWindow.xaml                           checkbox removed
+- MainWindow.xaml.cs                        handler removed, cleanup called at start
+- SettingsService.cs                        StartWithWindows key removed
+
+**2. Simple view.**
+Collapses each adapter row to the connection name and its toggle, and hides the
+header and status bar. Persisted in settings.json.
+
+- AdapterViewModel.cs      SimpleView + ShowDetails/ShowIpRow/ShowDnsRow, INPC
+- MainWindow.xaml          three detail rows bound to the new flags; toggle
+                           re-centres via DataTrigger; toolbar is a WrapPanel
+- MainWindow.xaml.cs       ApplySimpleView, SimpleView_Click
+- SettingsService.cs       SimpleView key
 
 ## Gate 3 detail
-Security: the change removes an attack path and adds none. New code takes no
-user input, opens no network, launches no process; it only builds paths from
-Environment.GetFolderPath. On re-review the %SystemRoot% fallback was removed
-deliberately — an environment variable is inherited from the launching process,
-and it should not be an input to the one path this fix depends on. Resolution
-now falls back to the literal default and otherwise fails closed (netsh does not
-start) rather than degrading to a bare name.
 
-Quality: shared resolution extracted to one class instead of duplicated across
-the two services; resolved once at type initialization rather than per call.
-No nesting, sizing, or allocation concerns.
+Security: the change removes an attack path and adds none. The one new code
+path is a single `DeleteValue` on a per-user `HKCU` key, on a value this app
+itself created. It takes no input, launches no process, opens no network, and
+adds no dependency. Simple view is pure presentation; a tampered `SimpleView`
+value in settings.json can only hide or show UI. Removing the feature also
+strengthens an existing README claim — the app now registers no autostart entry
+of any kind.
 
-Build-by-inspection (since Gate 2 cannot run): caught and fixed a CS8600
-nullable warning in an earlier draft where a string? was assigned to a var-typed
-string under #nullable enable. Current form has no nullable assignment.
+Known trade-off, accepted: with the status bar hidden, a failed adapter toggle
+has no text to report to. The failure is still visible — the toggle snaps back,
+which `ToggleAdapter_Click` already does on both the failure and exception paths.
+
+Quality: no deep nesting, no function over ~15 lines, no new allocation in a hot
+path. `ApplySimpleView` is O(adapters) and runs on user action only.
+`AdapterViewModel` gains `INotifyPropertyChanged` for exactly one property — the
+README's layering section previously claimed the view models had none, and was
+corrected rather than left stale.
+
+## Build-by-inspection (since Gate 2 cannot run)
+
+- Caught a missing `using System.Linq` in the scheduled-task draft (`Describe`
+  used `Select`/`FirstOrDefault`); that file was subsequently deleted anyway
+- `AdapterViewModel.cs` had no `#nullable enable`; added before introducing
+  `PropertyChangedEventHandler?`, which would otherwise warn CS8632
+- All five XAML/XML files re-parsed clean after editing
+- `Task.Run(LegacyStartupCleanup.RemoveRunEntry)` binds the `Action` overload;
+  `System.Threading.Tasks` was already imported
+- Every `x:Name` the code-behind touches (`HeaderPanel`, `StatusBar`,
+  `SimpleViewCheckBox`) exists in the XAML, and every `Click=` handler still
+  resolves — grep confirms no `StartWithWindows` reference survives
 
 ## Known issues NOT addressed in this release
 Documented in README "Known limitations and hardening notes", not fixed here:

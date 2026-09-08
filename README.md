@@ -24,8 +24,8 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 **General**
 - System tray icon — minimize to tray and keep it running in the background
 - Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
-- Start with Windows — optional auto-launch via registry Run key
-- Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, start-with-Windows)
+- Simple view — strip the adapter list down to connection names and their toggles, and hide the header and status bar
+- Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, simple-view)
 - Custom app icon and Windows 11-inspired UI
 - Status bar links to the project on GitHub and to the running version's release notes
 - Runs as administrator (required to enable/disable adapters and change firewall/metric settings)
@@ -76,17 +76,37 @@ broker/UI design: the WPF interface, the WMI calls, and the `netsh` calls all
 run inside one elevated process. The practical consequence is that the trust
 decision is about the binary as a whole, not about one privileged component.
 
-Three things are deliberately kept *out* of that elevated scope:
+Two things are deliberately kept *out* of that elevated scope:
 
 - **Opening links.** Status-bar URLs are handed to `explorer.exe` rather than
   shell-executed. A direct `ShellExecute` from an elevated process would launch
   your default browser as administrator; delegating to the already-running
   user-level shell keeps the browser unelevated.
-- **The startup entry.** "Start with Windows" writes to `HKCU\...\Run` — the
-  per-user key — not the machine-wide `HKLM`. It affects only the current user
-  and can be removed without admin rights.
 - **Stored settings.** Both JSON files live under `%LOCALAPPDATA%`, per-user, not
   in a machine-wide or world-writable location.
+
+### Why there is no "start with Windows"
+
+Versions 1.1.0 through 1.2.1 offered a start-with-Windows checkbox that wrote a
+value under `HKCU\...\CurrentVersion\Run`. It never worked, and could not: the
+shell launches Run entries **unelevated**, this app is manifested
+`requireAdministrator`, and UAC has no interactive desktop to prompt on that
+early in logon — so Windows discarded the entry every time, silently. The value
+was created and the app never appeared.
+
+The option was removed in v1.3.0 rather than reimplemented, because the
+mechanism that *does* work — a scheduled task registered at
+`RunLevel=HighestAvailable` with a logon trigger — is a silent elevation path.
+Task Scheduler would start this process as administrator at every logon with no
+prompt, so anyone able to overwrite the executable would get administrator on
+the next logon. That is easy while the app lives in `Downloads` or any other
+folder a standard user can write to, which is the normal case for a portable
+single `.exe`, and there is no code signature to make the substitution visible.
+Trading a permanent unprompted elevation path for a convenience toggle is not a
+good deal, so the app does not auto-start at all. Launch it when you need it and
+leave it in the tray.
+
+On first run, v1.3.0 deletes the leftover `Run` value from earlier versions.
 
 ### Input handling at privileged boundaries
 
@@ -119,12 +139,15 @@ directory, which only administrators can write to, removes that path.
   that could be one.
 - **No machine-wide changes outside the three operations above.** No services,
   scheduled tasks, drivers, or `HKLM` writes.
+- **No auto-start.** The app registers no logon task and no `Run` entry; it runs
+  only when you launch it. See
+  [Why there is no "start with Windows"](#why-there-is-no-start-with-windows).
 
 ### Local state
 
 | File | Contents |
 |---|---|
-| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Three booleans: minimize-to-tray, pin-to-desktop, start-with-Windows |
+| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Three booleans: minimize-to-tray, pin-to-desktop, simple-view |
 | `%LOCALAPPDATA%\QuickNetSwitcher\adapter_order.json` | A list of adapter ID strings used for display order |
 
 Both are read with `System.Text.Json` into concrete types (`AppSettings` and
@@ -150,8 +173,8 @@ Stated plainly rather than left for you to discover:
   `SetParent` to place this elevated window underneath a window owned by the
   unelevated desktop shell. It is an unusual arrangement; turn the setting off
   if you would rather not have it.
-- **Some failures are silent.** Settings and startup-registry writes swallow
-  their exceptions, so a write that fails does so without surfacing an error.
+- **Some failures are silent.** Settings writes swallow their exceptions, so a
+  write that fails does so without surfacing an error.
 - **Exception text is shown in the UI.** Error messages from WMI and `netsh` are
   written to the status bar verbatim, which can expose internal detail. For a
   local single-user utility this is informative rather than sensitive.
@@ -197,7 +220,7 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 - **Route Table:** WMI queries the system route table and resolves adapter indexes to friendly names for display.
 - **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`.
 - **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
-- **Start with Windows:** Manages an `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` registry entry pointing to the app executable.
+- **Simple view:** A flag on each `AdapterViewModel` collapses the status, address and DNS rows of the adapter template, leaving the name and its toggle; the window's header and status bar are collapsed alongside them. The toolbar stays visible, since it carries the switch back out.
 - **Settings:** All toolbar toggles are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
 - **Status bar links:** URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
 - The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, metric, and firewall changes all require it.
@@ -218,7 +241,7 @@ QuickNetSwitcher.sln
     ├── NetworkAdapterService.cs    WMI adapter discovery; enable/disable; metric via netsh
     ├── RouteTableService.cs        WMI route table query and interface-name resolution
     ├── FirewallService.cs          Firewall profile read/write via netsh advfirewall
-    ├── StartupService.cs           HKCU Run key entry
+    ├── LegacyStartupCleanup.cs     Removes the dead pre-1.3.0 Run key entry
     ├── DesktopPinService.cs        user32 interop for the desktop-layer pin
     ├── SettingsService.cs          settings.json load/save
     ├── AdapterOrderService.cs      adapter_order.json load/save, order application
@@ -241,8 +264,10 @@ The code splits into three layers with a deliberately simple shape:
 - **View models** (`AdapterViewModel`, `FirewallViewModel`) are plain display
   objects that map a service record to formatted strings (`IpDisplay`,
   `MetricDisplay`) and visibility flags (`HasIp`, `HasGateway`) for binding.
-  They are not full MVVM — there is no `INotifyPropertyChanged` and no
-  commanding; the list is rebuilt on refresh instead.
+  They are not full MVVM — there is no commanding, and the list is rebuilt on
+  refresh rather than updated in place. `AdapterViewModel` implements
+  `INotifyPropertyChanged` for exactly one property, `SimpleView`, which has to
+  change on an item that is already bound.
 - **`MainWindow`** holds the UI and all event handlers, and is the only place
   that coordinates between services and the view. At ~550 lines it is by far the
   largest file in the project.
@@ -268,6 +293,13 @@ on refresh.
   [Download Size](#download-size)).
 
 ## Version History
+
+### v1.3.0 — 2026-09-08
+- Removed "Start with Windows". It never worked — the shell launches `HKCU\...\Run` entries unelevated, and this app is manifested `requireAdministrator`, so Windows discarded the entry at every logon without an error. The registry value was written and the app never started
+- It was removed rather than fixed: the mechanism that works is a scheduled task at `RunLevel=HighestAvailable`, which would start this process as administrator at every logon with no UAC prompt. Anyone able to overwrite the unsigned executable — trivial while it sits in `Downloads` — would get administrator on the next logon. See [Why there is no "start with Windows"](#why-there-is-no-start-with-windows)
+- The leftover `Run` value from v1.1.0–v1.2.1 is deleted on first run of this version
+- New "Simple view" toggle: collapses each adapter row to its connection name and toggle, and hides the header and status bar. The setting is remembered between sessions
+- Toolbar checkboxes now reflow instead of clipping when the window is narrow
 
 ### v1.2.1 — 2026-09-08
 - Security: `netsh` and `explorer.exe` are now launched by absolute path instead of by bare name. Windows searches the application's own directory before `System32`, so a `netsh.exe` planted beside the app would previously have been run with administrator rights — a privilege escalation path for anything already running as the user. Paths are resolved once in the new `SystemPaths` helper
@@ -310,4 +342,4 @@ https://github.com/darthrater78/windows_quick_net_switcher
 
 ## Release Notes
 
-https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.2.1
+https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.0

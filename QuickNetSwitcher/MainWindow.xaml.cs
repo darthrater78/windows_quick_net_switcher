@@ -48,6 +48,9 @@ public partial class MainWindow : Window
         AdapterList.ItemsSource = _adapters;
         LoadAdapters();
 
+        // "Start with Windows" was removed in v1.3.0; drop the value it left behind.
+        _ = Task.Run(LegacyStartupCleanup.RemoveRunEntry);
+
         Loaded += (_, _) =>
         {
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () =>
@@ -68,14 +71,15 @@ public partial class MainWindow : Window
         _settings = SettingsService.Load();
         MinimizeToTrayCheckBox.IsChecked = _settings.MinimizeToTray;
         PinToDesktopCheckBox.IsChecked = _settings.PinToDesktop;
-        StartWithWindowsCheckBox.IsChecked = _settings.StartWithWindows;
+        SimpleViewCheckBox.IsChecked = _settings.SimpleView;
+        ApplySimpleView(_settings.SimpleView);
     }
 
     private void SaveSettings()
     {
         _settings.MinimizeToTray = MinimizeToTrayCheckBox.IsChecked == true;
         _settings.PinToDesktop = PinToDesktopCheckBox.IsChecked == true;
-        _settings.StartWithWindows = StartWithWindowsCheckBox.IsChecked == true;
+        _settings.SimpleView = SimpleViewCheckBox.IsChecked == true;
         SettingsService.Save(_settings);
     }
 
@@ -104,12 +108,23 @@ public partial class MainWindow : Window
         StatusText.Text = pin ? "Pinned to desktop" : "Unpinned from desktop";
     }
 
-    private void StartWithWindows_Click(object sender, RoutedEventArgs e)
+    private void SimpleView_Click(object sender, RoutedEventArgs e)
     {
-        var enable = StartWithWindowsCheckBox.IsChecked == true;
-        StartupService.SetEnabled(enable);
+        ApplySimpleView(SimpleViewCheckBox.IsChecked == true);
         SaveSettings();
-        StatusText.Text = enable ? "Will start with Windows" : "Will not start with Windows";
+    }
+
+    // Simple view strips the window back to what it is for: a list of connection names
+    // and their toggles. Header and status bar go with the per-adapter detail; the
+    // toolbar stays, since it carries the switch back out.
+    private void ApplySimpleView(bool simple)
+    {
+        var chrome = simple ? Visibility.Collapsed : Visibility.Visible;
+        HeaderPanel.Visibility = chrome;
+        StatusBar.Visibility = chrome;
+
+        foreach (var adapter in _adapters)
+            adapter.SimpleView = simple;
     }
 
     private void SettingCheckBox_Click(object sender, RoutedEventArgs e)
@@ -196,7 +211,10 @@ public partial class MainWindow : Window
 
             _adapters.Clear();
             foreach (var a in ordered)
+            {
+                a.SimpleView = _settings.SimpleView;
                 _adapters.Add(a);
+            }
 
             var enabled = _adapters.Count(a => a.IsEnabled);
             StatusText.Text = $"{_adapters.Count} adapters found  ·  {enabled} enabled";

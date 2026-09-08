@@ -1,7 +1,7 @@
 <Window x:Class="QuickNetSwitcher.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Quick Net Switcher v1.2.1"
+        Title="Quick Net Switcher v1.3.0"
         Width="620" Height="580"
         MinWidth="500" MinHeight="450"
         WindowStartupLocation="CenterScreen"
@@ -23,7 +23,7 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,8">
+        <StackPanel x:Name="HeaderPanel" Grid.Row="0" Margin="0,0,0,8">
             <TextBlock Text="Quick Net Switcher"
                        FontSize="22" FontWeight="SemiBold"
                        Foreground="{StaticResource TextPrimaryBrush}" />
@@ -58,14 +58,14 @@
                         </Style>
                     </Button.Resources>
                 </Button>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <WrapPanel VerticalAlignment="Center">
                     <CheckBox x:Name="MinimizeToTrayCheckBox"
                               Content="Minimize to tray"
                               IsChecked="True"
                               VerticalAlignment="Center"
                               Foreground="{StaticResource TextSecondaryBrush}"
                               FontSize="12"
-                              Margin="0,0,16,0"
+                              Margin="0,2,16,2"
                               Click="SettingCheckBox_Click" />
                     <CheckBox x:Name="PinToDesktopCheckBox"
                               Content="Pin to desktop"
@@ -73,15 +73,16 @@
                               VerticalAlignment="Center"
                               Foreground="{StaticResource TextSecondaryBrush}"
                               FontSize="12"
-                              Margin="0,0,16,0"
+                              Margin="0,2,16,2"
                               Click="PinToDesktop_Click" />
-                    <CheckBox x:Name="StartWithWindowsCheckBox"
-                              Content="Start with Windows"
+                    <CheckBox x:Name="SimpleViewCheckBox"
+                              Content="Simple view"
                               VerticalAlignment="Center"
                               Foreground="{StaticResource TextSecondaryBrush}"
                               FontSize="12"
-                              Click="StartWithWindows_Click" />
-                </StackPanel>
+                              Margin="0,2,0,2"
+                              Click="SimpleView_Click" />
+                </WrapPanel>
             </DockPanel>
         </Border>
 
@@ -139,11 +140,23 @@
                                         <!-- Toggle switch on the right -->
                                         <CheckBox DockPanel.Dock="Right"
                                                   IsChecked="{Binding IsEnabled, Mode=OneWay}"
-                                                  Style="{StaticResource ToggleSwitchStyle}"
-                                                  VerticalAlignment="Top"
-                                                  Margin="0,14,0,0"
                                                   Click="ToggleAdapter_Click"
-                                                  Tag="{Binding AdapterId}" />
+                                                  Tag="{Binding AdapterId}">
+                                            <CheckBox.Style>
+                                                <Style TargetType="CheckBox" BasedOn="{StaticResource ToggleSwitchStyle}">
+                                                    <!-- Detail view: align with the name row, which sits above three
+                                                         further rows. Simple view: that row is the whole item. -->
+                                                    <Setter Property="VerticalAlignment" Value="Top" />
+                                                    <Setter Property="Margin" Value="0,14,0,0" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding SimpleView}" Value="True">
+                                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                                            <Setter Property="Margin" Value="0" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </CheckBox.Style>
+                                        </CheckBox>
 
                                         <!-- Drag handle -->
                                         <Border DockPanel.Dock="Left"
@@ -187,7 +200,8 @@
                                                            TextTrimming="CharacterEllipsis" />
                                             </DockPanel>
                                             <!-- Row 2: status + description -->
-                                            <StackPanel Orientation="Horizontal" Margin="16,3,0,0">
+                                            <StackPanel Orientation="Horizontal" Margin="16,3,0,0"
+                                                        Visibility="{Binding ShowDetails, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock FontSize="11"
                                                            Foreground="{StaticResource TextSecondaryBrush}">
                                                     <TextBlock.Text>
@@ -208,7 +222,7 @@
                                             </StackPanel>
                                             <!-- Row 3: IP / CIDR / Gateway / Metric -->
                                             <StackPanel Orientation="Horizontal" Margin="16,2,0,0"
-                                                        Visibility="{Binding HasIp, Converter={StaticResource BoolToVis}}">
+                                                        Visibility="{Binding ShowIpRow, Converter={StaticResource BoolToVis}}">
                                                 <TextBlock Text="{Binding IpDisplay}"
                                                            FontSize="12" FontFamily="Consolas"
                                                            Foreground="{StaticResource AccentBrush}" />
@@ -233,7 +247,7 @@
                                                        FontSize="11" FontFamily="Consolas"
                                                        Foreground="{StaticResource TextSecondaryBrush}"
                                                        Text="{Binding DnsSuffix, StringFormat='dns: {0}'}"
-                                                       Visibility="{Binding HasDnsSuffix, Converter={StaticResource BoolToVis}}" />
+                                                       Visibility="{Binding ShowDnsRow, Converter={StaticResource BoolToVis}}" />
                                         </StackPanel>
                                     </DockPanel>
                                 </Border>
@@ -401,7 +415,8 @@
         </TabControl>
 
         <!-- Status bar -->
-        <Border Grid.Row="3"
+        <Border x:Name="StatusBar"
+                Grid.Row="3"
                 Margin="0,8,0,0"
                 Padding="8,4">
             <DockPanel>
