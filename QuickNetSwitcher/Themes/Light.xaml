@@ -19,7 +19,9 @@
     <SolidColorBrush x:Key="CardBrush" Color="#FFFFFF" />
     <SolidColorBrush x:Key="AltRowBrush" Color="#F8F8F8" />
     <SolidColorBrush x:Key="SelectionBrush" Color="#E0EEFF" />
-    <SolidColorBrush x:Key="HoverBrush" Color="#00000014" />
+    <!-- Eight-digit hex is #AARRGGBB in WPF: alpha leads. #14000000 is a 8%
+         black wash, whereas #00000014 would be a transparent blue. -->
+    <SolidColorBrush x:Key="HoverBrush" Color="#14000000" />
     <SolidColorBrush x:Key="BorderBrush" Color="#E0E0E0" />
 
     <!-- Text -->

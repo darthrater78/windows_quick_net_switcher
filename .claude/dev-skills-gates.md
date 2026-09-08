@@ -1,25 +1,36 @@
 # Dev Skills gate state
 Track: release sequence
 Version: 1.3.0
-Updated: 2026-09-08 (theme + sizing work on top of green CI)
+Updated: 2026-09-08 (HoverBrush ARGB fix; toolbar restored in simple view)
 Branch: claude/windows-registry-adapter-simple-view-xftg6g
 
 🔢 VERSION    ✅ csproj, app.manifest, MainWindow.xaml title, README release URL
               all at 1.3.0; v1.2.1 tagged on remote (previous release shipped);
               RepositoryUrl present; in-app release-notes link derives from the
               assembly version, so it follows automatically
-🔨 BUILD      ⏳ was ✅ on f8ac987; theme + sizing changes since then are NOT
-              compiled. Re-verify on CI before this is ✅ again.
-              Prior pass: build.yml (windows-latest) succeeded on f8ac987 in 74s,
-              run 34278563923. This was the first ever compile of the branch:
-              no dotnet SDK in the session container (Linux, net8.0-windows WPF
-              target), so the pre-push pass was by inspection only (notes below).
-              Release artifact is still built by CI at tag time, not locally.
+🔨 BUILD      ⏳ green on fd899c8; the HoverBrush colour fix since then is not
+              yet through CI (a colour literal, so compile risk is nil, but the
+              gate does not pass on my say-so).
+              Prior: CI green on fd899c8 — build.yml/windows-latest,
+              run 34279898964, 126s. Covers the dark theme and the new
+              ControlTemplates. Earlier pass on f8ac987: run 34278563923, 74s.
+              No dotnet SDK in the session container (Linux, net8.0-windows WPF
+              target), so every pre-push pass here was by inspection; CI is the
+              only real compile. Release artifact is built by CI at tag time.
+              NOT verified: runtime appearance. Compiling proves the XAML parses,
+              not that it looks right — and that caveat immediately paid out: the
+              user ran the build and found the tab hover rendering bright yellow.
+              Cause was mine: WPF eight-digit hex is #AARRGGBB, alpha first, so
+              #FFFFFF14 is opaque RGB(255,255,20), not the 8% white wash intended.
+              Light had the mirror error (#00000014 = fully transparent, so its
+              hover was invisible rather than wrong-looking, which is why only
+              dark mode surfaced it). Both now #14FFFFFF / #14000000, with the
+              trap noted in Light.xaml. Only one consumer: the TabItem hover.
 🔒 SECURITY   ✅ 0 Critical, 0 High — net reduction in attack surface
 📄 DOCS       ✅ v1.3.0 changelog entry; new "Why there is no start with Windows"
               section; feature list, How It Works, local-state table, known
               limitations, architecture tree and layering notes all corrected
-📦 RELEASE    ⏳ PR #6 open — https://github.com/darthrater78/windows_quick_net_switcher/pull/6
+📦 RELEASE    ✅ PR #6 open — https://github.com/darthrater78/windows_quick_net_switcher/pull/6
               commits 240229e + f8ac987; session subscribed to PR activity
 🚀 SHIP       ⬜ PR #6 is green and mergeable_state=clean. Remaining: merge,
               then tag v1.3.0 to fire release.yml. Tag push goes to the user (container
@@ -48,15 +59,17 @@ administrator on the next logon. No code signature makes the swap visible.
 - MainWindow.xaml.cs                        handler removed, cleanup called at start
 - SettingsService.cs                        StartWithWindows key removed
 
-**2. Simple view.**
+**2. Simple view.** (toolbar-hiding reverted, see below)
 Collapses each adapter row to the connection name and its toggle, and hides the
 header, the status bar and the minimize-to-tray and pin-to-desktop checkboxes --
 leaving the simple-view checkbox and Refresh. The checkbox stays because it is
 the only way back out. Persisted in settings.json.
 
-Hiding a checkbox does not change its IsChecked state, so minimize-to-tray and
-pin-to-desktop keep working: SaveSettings, Window_StateChanged and
-Window_Closing all read them while collapsed.
+Hiding the toolbar checkboxes was tried at the user's request and then reverted
+at the user's request: the toolbar is a single row whether it carries one
+checkbox or four, so collapsing them removed the settings' controls and returned
+no height. Only the header and status bar are hidden now; the dead space the user
+actually saw was the star-sized list row, fixed by SizeToContent instead.
 
 - AdapterViewModel.cs      SimpleView + ShowDetails/ShowIpRow/ShowDnsRow, INPC
 - MainWindow.xaml          three detail rows bound to the new flags; toggle

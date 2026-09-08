@@ -19,7 +19,7 @@
     <SolidColorBrush x:Key="CardBrush" Color="#272727" />
     <SolidColorBrush x:Key="AltRowBrush" Color="#2E2E2E" />
     <SolidColorBrush x:Key="SelectionBrush" Color="#123B5E" />
-    <SolidColorBrush x:Key="HoverBrush" Color="#FFFFFF14" />
+    <SolidColorBrush x:Key="HoverBrush" Color="#14FFFFFF" />
     <SolidColorBrush x:Key="BorderBrush" Color="#3D3D3D" />
 
     <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F0F0F0" />

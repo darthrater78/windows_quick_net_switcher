@@ -167,20 +167,16 @@ public partial class MainWindow : Window
     }
 
     // Simple view strips the window back to what it is for: a list of connection names
-    // and their toggles. Header, status bar and the other three settings checkboxes
-    // all go; the simple-view checkbox itself has to stay, since it is the way out.
+    // and their toggles, with the header and status bar out of the way.
     //
-    // The hidden checkboxes keep their IsChecked state, so minimize-to-tray and
-    // pin-to-desktop go on behaving exactly as they did -- SaveSettings, the window
-    // state handler and the close handler all read them while they are collapsed.
+    // The toolbar checkboxes stay. Hiding them was tried and reverted: the toolbar is
+    // one row whether it carries one checkbox or four, so collapsing them cost the
+    // settings their controls and bought back no height at all.
     private void ApplySimpleView(bool simple)
     {
         var chrome = simple ? Visibility.Collapsed : Visibility.Visible;
         HeaderPanel.Visibility = chrome;
         StatusBar.Visibility = chrome;
-        MinimizeToTrayCheckBox.Visibility = chrome;
-        PinToDesktopCheckBox.Visibility = chrome;
-        DarkModeCheckBox.Visibility = chrome;
 
         foreach (var adapter in _adapters)
             adapter.SimpleView = simple;
