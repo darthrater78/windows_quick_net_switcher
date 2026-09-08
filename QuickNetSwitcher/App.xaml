@@ -178,6 +178,119 @@
                 </Setter>
             </Style>
 
+            <!-- The tab strip carries the window's links on the right of the same
+                 row, via the TabControl's Tag. They used to sit in the status bar,
+                 which simple view collapses, taking them with it. -->
+            <Style x:Key="MainTabControlStyle" TargetType="TabControl">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TabControl">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <DockPanel Grid.Row="0" LastChildFill="False">
+                                    <TabPanel DockPanel.Dock="Left" IsItemsHost="True" />
+                                    <ContentPresenter DockPanel.Dock="Right"
+                                                      Content="{TemplateBinding Tag}"
+                                                      VerticalAlignment="Center"
+                                                      Margin="0,0,8,4" />
+                                </DockPanel>
+
+                                <Border Grid.Row="1"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}">
+                                    <ContentPresenter ContentSource="SelectedContent" />
+                                </Border>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Settings menu. WPF's stock menu chrome is light-themed like the rest,
+                 and a menu is the one surface that pops up over everything else, so an
+                 unthemed one is the most conspicuous thing on a dark window. -->
+            <Style TargetType="ContextMenu">
+                <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ContextMenu">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="6"
+                                    Padding="4">
+                                <Border.Effect>
+                                    <DropShadowEffect ShadowDepth="2" BlurRadius="8" Opacity="0.25" />
+                                </Border.Effect>
+                                <StackPanel IsItemsHost="True"
+                                            KeyboardNavigation.DirectionalNavigation="Cycle" />
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style TargetType="MenuItem">
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="MenuItem">
+                            <Border x:Name="chrome"
+                                    Background="Transparent"
+                                    CornerRadius="4"
+                                    Padding="8,6">
+                                <DockPanel>
+                                    <Border x:Name="box"
+                                            DockPanel.Dock="Left"
+                                            Width="14" Height="14" CornerRadius="3"
+                                            Margin="0,0,8,0"
+                                            VerticalAlignment="Center"
+                                            Background="{DynamicResource ControlBrush}"
+                                            BorderBrush="{DynamicResource ControlBorderBrush}"
+                                            BorderThickness="1">
+                                        <Path x:Name="tick"
+                                              Data="M 0,3 L 2.5,5.5 L 6.8,1"
+                                              Stroke="{DynamicResource OnAccentBrush}"
+                                              StrokeThickness="1.5"
+                                              StrokeEndLineCap="Round"
+                                              StrokeStartLineCap="Round"
+                                              Visibility="Collapsed"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                                    </Border>
+                                    <ContentPresenter ContentSource="Header"
+                                                      VerticalAlignment="Center"
+                                                      RecognizesAccessKey="True" />
+                                </DockPanel>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsCheckable" Value="False">
+                                    <Setter TargetName="box" Property="Visibility" Value="Collapsed" />
+                                </Trigger>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="box" Property="Background" Value="{DynamicResource AccentFillBrush}" />
+                                    <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource AccentFillBrush}" />
+                                    <Setter TargetName="tick" Property="Visibility" Value="Visible" />
+                                </Trigger>
+                                <Trigger Property="IsHighlighted" Value="True">
+                                    <Setter TargetName="chrome" Property="Background" Value="{DynamicResource HoverBrush}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <!-- Text input. The stock template already honours these, so it keeps
                  its own chrome; only the colours change. CaretBrush matters: the
                  default caret is black and invisible on a dark field. -->

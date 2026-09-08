@@ -11,7 +11,8 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 **Adapters tab**
 - View all physical network adapters with real-time status, speed, MAC address, IP/CIDR, gateway, DNS suffix, and interface metric
 - Toggle adapters on/off with a single click
-- Drag-to-reorder the adapter list — order is remembered between launches
+- Drag-to-reorder the adapter list, with a translucent ghost of the whole row following the pointer — order is remembered between launches
+- Hide disconnected adapters, to cut the list down to the ones actually carrying a network
 - Edit an adapter's interface metric (1–9999) via a dialog
 
 **Route Table tab**
@@ -28,7 +29,7 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 - Dark theme — follows the Windows app theme by default, with a toolbar toggle to override it. Both themes cover the window chrome, tabs, buttons, checkboxes, scrollbars, the route grid, the metric dialog, the title bar and the tray menu
 - Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, simple-view, and the theme once you pick one)
 - Custom app icon and Windows 11-inspired UI
-- Status bar links to the project on GitHub and to the running version's release notes
+- Links to the project on GitHub and to the running version's release notes, at the right-hand end of the tab strip
 - Runs as administrator (required to enable/disable adapters and change firewall/metric settings)
 - Single-file self-contained executable — no .NET runtime install needed
 
@@ -148,7 +149,7 @@ directory, which only administrators can write to, removes that path.
 
 | File | Contents |
 |---|---|
-| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Three booleans (minimize-to-tray, pin-to-desktop, simple-view) and a nullable dark-mode flag, where null means "follow Windows" |
+| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Four booleans (minimize-to-tray, pin-to-desktop, simple-view, hide-disconnected) and a nullable dark-mode flag, where null means "follow Windows" |
 | `%LOCALAPPDATA%\QuickNetSwitcher\adapter_order.json` | A list of adapter ID strings used for display order |
 
 Both are read with `System.Text.Json` into concrete types (`AppSettings` and
@@ -222,9 +223,11 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 - **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`.
 - **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
 - **Simple view:** A flag on each `AdapterViewModel` collapses the status, address and DNS rows of the adapter template, leaving the name and its toggle. The header and the status bar are collapsed alongside them; the toolbar stays, since it occupies one row whether it carries one checkbox or four. The window also switches to `SizeToContent="Height"` so it fits the list instead of holding its full height; this applies only on the Adapters tab, since the route table would measure to every row it holds.
+- **Hide disconnected:** A filter on the adapter list's `ICollectionView`, so hidden adapters stay in the underlying collection and the saved display order keeps its full set. Disabled adapters are never filtered out — switching one back on is what the app is for, and hiding it would put the row you just toggled off out of reach.
+- **Reorder ghost:** Dragging a row's handle adds a `DragGhostAdorner` to the list's adorner layer, painting a translucent `VisualBrush` copy of the whole row that tracks the pointer. WPF supplies no drag visual of its own beyond the cursor.
 - **Theming:** Two `ResourceDictionary` palettes (`Themes/Light.xaml`, `Themes/Dark.xaml`) define the same key set, and `ThemeService` swaps one for the other in slot 0 of the application's merged dictionaries. Every colour is referenced with `DynamicResource`, so the swap propagates without rebuilding any window. The default comes from `AppsUseLightTheme` under `HKCU\...\Themes\Personalize`; clicking the toggle stores an explicit choice that stops following Windows. The title bar is darkened separately through `DwmSetWindowAttribute`, since the caption is drawn by the OS rather than WPF, and the tray menu is coloured by hand because Windows Forms sits outside WPF's resource system.
-- **Settings:** All toolbar toggles are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
-- **Status bar links:** URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
+- **Settings:** Minimize-to-tray, pin-to-desktop and the theme sit behind the toolbar's gear menu, since they are set once and left alone; hide-disconnected and simple view stay on the bar, because they change what you are looking at. All of them are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
+- **Links:** The GitHub and release-notes buttons sit at the right-hand end of the tab strip, placed there by the `TabControl` template via its `Tag`. URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
 - The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, metric, and firewall changes all require it.
 
 ## Architecture
@@ -247,6 +250,7 @@ QuickNetSwitcher.sln
     ├── FirewallService.cs          Firewall profile read/write via netsh advfirewall
     ├── LegacyStartupCleanup.cs     Removes the dead pre-1.3.0 Run key entry
     ├── ThemeService.cs             Light/dark palette swap, title bar, OS theme lookup
+    ├── DragGhostAdorner.cs         Translucent row preview shown while reordering
     ├── DesktopPinService.cs        user32 interop for the desktop-layer pin
     ├── SettingsService.cs          settings.json load/save
     ├── AdapterOrderService.cs      adapter_order.json load/save, order application
@@ -305,7 +309,12 @@ on refresh.
 - The leftover `Run` value from v1.1.0–v1.2.1 is deleted on first run of this version
 - New "Simple view" toggle: collapses each adapter row to its connection name and toggle, and hides the header and the status bar. The window shrinks to fit the list rather than keeping its full height, so there is no dead space below the last adapter
 - New dark theme, following the Windows app theme by default with a toolbar toggle to override it. WPF's stock chrome is painted for a light theme and cannot be recoloured through properties alone, so tabs, buttons, checkboxes and scrollbars are templated; the OS-drawn title bar is handled through `DwmSetWindowAttribute` and the Windows Forms tray menu is coloured directly. Contrast was checked against the surface each colour actually sits on rather than picked by eye
-- Both settings are remembered between sessions
+- New "Hide disconnected" toggle, filtering the adapter list down to adapters that are actually connected. Disabled adapters are deliberately exempt: hiding them would make an adapter vanish the moment you switched it off, and switching it back on is what the app is for
+- Reordering an adapter now drags a translucent ghost of the whole row rather than the stock drag cursor
+- Fixed reordering triggering when it should not have: whether a press landed on a drag handle was acted on but not remembered, so a later press anywhere in the list — the second click of a double-click, for instance — could reorder whichever row sat under the stale start point
+- The GitHub and release-notes links moved from the status bar to the right-hand end of the tab strip, so they stay reachable in simple view
+- Preferences moved into a gear menu on the toolbar — minimize-to-tray, pin-to-desktop and the theme — leaving hide-disconnected and simple view on the bar. Five checkboxes had grown wider than the window's 500px minimum and wrapped to a second row
+- All settings are remembered between sessions
 - Toolbar checkboxes now reflow instead of clipping when the window is narrow
 
 ### v1.2.1 — 2026-09-08

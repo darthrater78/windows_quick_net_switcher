@@ -52,30 +52,48 @@
                         Foreground="{DynamicResource OnAccentBrush}"
                         BorderThickness="0"
                         Cursor="Hand" />
+                <!-- Set-once preferences live behind the gear; the two toggles that
+                     change what you are looking at stay on the bar. -->
+                <Button x:Name="SettingsButton"
+                        DockPanel.Dock="Right"
+                        Content="&#xE713;"
+                        FontFamily="Segoe MDL2 Assets, Segoe UI Symbol"
+                        FontSize="14"
+                        ToolTip="Settings"
+                        Click="SettingsButton_Click"
+                        Padding="8,4"
+                        Margin="0,0,8,0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Foreground="{DynamicResource TextSecondaryBrush}"
+                        Cursor="Hand">
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="SettingsMenu">
+                            <MenuItem x:Name="MinimizeToTrayMenuItem"
+                                      Header="Minimize to tray"
+                                      IsCheckable="True"
+                                      IsChecked="True"
+                                      Click="SettingMenuItem_Click" />
+                            <MenuItem x:Name="PinToDesktopMenuItem"
+                                      Header="Pin to desktop"
+                                      IsCheckable="True"
+                                      IsChecked="True"
+                                      Click="PinToDesktop_Click" />
+                            <MenuItem x:Name="DarkModeMenuItem"
+                                      Header="Dark theme"
+                                      IsCheckable="True"
+                                      Click="DarkMode_Click" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
                 <WrapPanel VerticalAlignment="Center">
-                    <CheckBox x:Name="MinimizeToTrayCheckBox"
-                              Content="Minimize to tray"
-                              IsChecked="True"
+                    <CheckBox x:Name="HideDisconnectedCheckBox"
+                              Content="Hide disconnected"
                               VerticalAlignment="Center"
                               Foreground="{DynamicResource TextSecondaryBrush}"
                               FontSize="12"
                               Margin="0,2,16,2"
-                              Click="SettingCheckBox_Click" />
-                    <CheckBox x:Name="PinToDesktopCheckBox"
-                              Content="Pin to desktop"
-                              IsChecked="True"
-                              VerticalAlignment="Center"
-                              Foreground="{DynamicResource TextSecondaryBrush}"
-                              FontSize="12"
-                              Margin="0,2,16,2"
-                              Click="PinToDesktop_Click" />
-                    <CheckBox x:Name="DarkModeCheckBox"
-                              Content="Dark"
-                              VerticalAlignment="Center"
-                              Foreground="{DynamicResource TextSecondaryBrush}"
-                              FontSize="12"
-                              Margin="0,2,16,2"
-                              Click="DarkMode_Click" />
+                              Click="HideDisconnected_Click" />
                     <CheckBox x:Name="SimpleViewCheckBox"
                               Content="Simple view"
                               VerticalAlignment="Center"
@@ -89,9 +107,32 @@
 
         <!-- Tab control: Adapters / Route Table -->
         <TabControl Grid.Row="2" x:Name="MainTabs"
+                    Style="{StaticResource MainTabControlStyle}"
                     Background="Transparent"
                     BorderThickness="0"
                     SelectionChanged="MainTabs_SelectionChanged">
+            <!-- Rendered at the right-hand end of the tab strip by the template. -->
+            <TabControl.Tag>
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="GitHub"
+                            Click="GitHubLink_Click"
+                            FontSize="11"
+                            Padding="0"
+                            Margin="0,0,12,0"
+                            Cursor="Hand"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource AccentBrush}" />
+                    <Button Content="Release Notes"
+                            Click="ReleaseNotesLink_Click"
+                            FontSize="11"
+                            Padding="0"
+                            Cursor="Hand"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource AccentBrush}" />
+                </StackPanel>
+            </TabControl.Tag>
             <!-- Adapters Tab -->
             <TabItem Header="Adapters">
                 <Border Background="{DynamicResource CardBrush}"
@@ -415,33 +456,12 @@
                 Grid.Row="3"
                 Margin="0,8,0,0"
                 Padding="8,4">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Content="GitHub"
-                            Click="GitHubLink_Click"
-                            FontSize="11"
-                            Padding="0"
-                            Margin="0,0,12,0"
-                            Cursor="Hand"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Foreground="{DynamicResource AccentBrush}" />
-                    <Button Content="Release Notes"
-                            Click="ReleaseNotesLink_Click"
-                            FontSize="11"
-                            Padding="0"
-                            Cursor="Hand"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Foreground="{DynamicResource AccentBrush}" />
-                </StackPanel>
-                <TextBlock x:Name="StatusText"
-                           Text="Ready"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextSecondaryBrush}"
-                           TextTrimming="CharacterEllipsis"
-                           HorizontalAlignment="Left" />
-            </DockPanel>
+            <TextBlock x:Name="StatusText"
+                       Text="Ready"
+                       FontSize="11"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       TextTrimming="CharacterEllipsis"
+                       HorizontalAlignment="Left" />
         </Border>
     </Grid>
 </Window>

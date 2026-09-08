@@ -29,6 +29,10 @@ public class AdapterViewModel : INotifyPropertyChanged
     public string MetricDisplay => InterfaceMetric > 0 ? $"metric {InterfaceMetric}" : "";
     public bool HasMac => !string.IsNullOrEmpty(MacAddress);
 
+    // "Connected" is the one status that means the adapter is actually carrying a
+    // network; everything else NetConnectionStatus reports is some flavour of not.
+    public bool IsConnected => Status == "Connected";
+
     private bool _simpleView;
 
     // Simple view strips the row back to the connection name and its toggle. The flag

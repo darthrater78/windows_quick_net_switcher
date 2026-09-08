@@ -1,17 +1,17 @@
 # Dev Skills gate state
 Track: release sequence
 Version: 1.3.0
-Updated: 2026-09-08 (HoverBrush ARGB fix; toolbar restored in simple view)
+Updated: 2026-09-08 (round 4: drift fix, links, drag, filter)
 Branch: claude/windows-registry-adapter-simple-view-xftg6g
 
 🔢 VERSION    ✅ csproj, app.manifest, MainWindow.xaml title, README release URL
               all at 1.3.0; v1.2.1 tagged on remote (previous release shipped);
               RepositoryUrl present; in-app release-notes link derives from the
               assembly version, so it follows automatically
-🔨 BUILD      ⏳ green on fd899c8; the HoverBrush colour fix since then is not
-              yet through CI (a colour literal, so compile risk is nil, but the
-              gate does not pass on my say-so).
-              Prior: CI green on fd899c8 — build.yml/windows-latest,
+🔨 BUILD      ⏳ green on e3cdcbc; the height-drift fix since then is not through
+              CI yet. Also NOT reproducible here — reported from the running app.
+              Prior: CI green on e3cdcbc — build.yml/windows-latest,
+              run 34280596524, 89s. Earlier: fd899c8 — build.yml/windows-latest,
               run 34279898964, 126s. Covers the dark theme and the new
               ControlTemplates. Earlier pass on f8ac987: run 34278563923, 74s.
               No dotnet SDK in the session container (Linux, net8.0-windows WPF
@@ -30,7 +30,7 @@ Branch: claude/windows-registry-adapter-simple-view-xftg6g
 📄 DOCS       ✅ v1.3.0 changelog entry; new "Why there is no start with Windows"
               section; feature list, How It Works, local-state table, known
               limitations, architecture tree and layering notes all corrected
-📦 RELEASE    ✅ PR #6 open — https://github.com/darthrater78/windows_quick_net_switcher/pull/6
+📦 RELEASE    ⏳ PR #6 open — https://github.com/darthrater78/windows_quick_net_switcher/pull/6
               commits 240229e + f8ac987; session subscribed to PR activity
 🚀 SHIP       ⬜ PR #6 is green and mergeable_state=clean. Remaining: merge,
               then tag v1.3.0 to fire release.yml. Tag push goes to the user (container
@@ -97,6 +97,42 @@ Adapters tab: the route table would measure every row and snap to screen height.
 - MainWindow.xaml / .cs                 DynamicResource, Dark toggle, UpdateWindowSizing
 - MetricDialog.xaml                     DynamicResource
 - SettingsService.cs                    bool? DarkMode (null = follow Windows)
+
+**4. Round 4 (user-reported from the running app).**
+- Simple-view height drift: the restore height was re-derived from ActualHeight on
+  every switch, which can still hold the shrunken value; MinHeight then clamped the
+  restore and each round trip baked the loss in. Now remembered, not re-derived,
+  tracked from user resizes only, with the mode-switch guard cleared at Loaded
+  priority since SizeChanged fires during the layout pass that follows the switch.
+- GitHub/Release Notes moved into the tab strip via a TabControl template that
+  presents the control's Tag at the right of the tab row. They now survive simple
+  view, which collapses the status bar they used to live in.
+- Reorder drag armed off a stale start point: whether the press hit a handle was
+  acted on but never stored, so any later press could reach the move handler and
+  reorder whatever sat under the old point. Now gated on a _dragHandleArmed flag.
+- DragGhostAdorner: translucent VisualBrush copy of the whole row on the adorner
+  layer, replacing the stock drag cursor.
+- Hide-disconnected filter on the list's ICollectionView, so hidden adapters stay in
+  the collection and adapter_order.json keeps its full set.
+
+- DragGhostAdorner.cs                    (new)
+- App.xaml                               MainTabControlStyle
+- MainWindow.xaml / .cs                  links, filter, drag arming, ghost, sizing
+- AdapterViewModel.cs                    IsConnected
+- SettingsService.cs                     HideDisconnected
+
+**5. Toolbar de-crowding (user asked for a suggestion; picked the gear menu).**
+Five checkboxes measured wider than the 500px MinWidth and wrapped to a second
+row. Minimize-to-tray, pin-to-desktop and dark theme moved into a ContextMenu
+behind a gear button; hide-disconnected and simple view stay on the bar, split on
+whether a toggle changes what you are looking at or is set once and left. Needed
+themed ContextMenu/MenuItem templates -- a popup is the most conspicuous place for
+WPF's light default chrome to show through on a dark window.
+
+JUDGEMENT CALL, flagged to the user: "hide adapters that are not connected" was read
+as excluding disabled adapters from the filter. Hiding them would make a row vanish
+the instant you toggled it off, and re-enabling is the app's core function. One-line
+change if the user wants the literal reading.
 
 ## Gate 3 detail
 

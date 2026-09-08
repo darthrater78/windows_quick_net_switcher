@@ -10,6 +10,7 @@ public class AppSettings
     public bool PinToDesktop { get; set; } = true;
     public bool MinimizeToTray { get; set; } = true;
     public bool SimpleView { get; set; } = false;
+    public bool HideDisconnected { get; set; } = false;
 
     // null means "follow the Windows app theme", which is the default until the
     // user actually picks one. A plain bool could not express that: it would have

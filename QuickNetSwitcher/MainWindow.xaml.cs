@@ -2,12 +2,15 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Interop;
@@ -37,19 +40,31 @@ public partial class MainWindow : Window
     private WinForms.NotifyIcon? _trayIcon;
     private List<RouteEntry> _allRoutes = new();
     private ObservableCollection<AdapterViewModel> _adapters = new();
+    private ICollectionView? _adapterView;
     private System.Windows.Point _dragStartPoint;
     private bool _isDragging;
+    private bool _dragHandleArmed;
+    private DragGhostAdorner? _dragGhost;
     private bool _firewallLoaded;
     private AppSettings _settings = new();
     private bool _isPinnedToDesktop;
     private double _detailViewHeight;
+    private bool _isAdjustingSize;
 
     public MainWindow()
     {
         InitializeComponent();
+
+        // The size to snap back to, seeded from the XAML height before anything can
+        // switch modes. Tracked from here on by user resizes only.
+        _detailViewHeight = Height;
+        SizeChanged += Window_SizeChanged;
+
         SetupTrayIcon();
         LoadSettings();
         AdapterList.ItemsSource = _adapters;
+        _adapterView = CollectionViewSource.GetDefaultView(_adapters);
+        _adapterView.Filter = IsAdapterVisible;
         LoadAdapters();
 
         // "Start with Windows" was removed in v1.3.0; drop the value it left behind.
@@ -80,20 +95,22 @@ public partial class MainWindow : Window
         // No explicit choice yet means follow Windows.
         var dark = _settings.DarkMode ?? ThemeService.WindowsPrefersDark();
         ThemeService.Apply(dark);
-        DarkModeCheckBox.IsChecked = dark;
+        DarkModeMenuItem.IsChecked = dark;
         ApplyTrayMenuTheme();
 
-        MinimizeToTrayCheckBox.IsChecked = _settings.MinimizeToTray;
-        PinToDesktopCheckBox.IsChecked = _settings.PinToDesktop;
+        MinimizeToTrayMenuItem.IsChecked = _settings.MinimizeToTray;
+        PinToDesktopMenuItem.IsChecked = _settings.PinToDesktop;
         SimpleViewCheckBox.IsChecked = _settings.SimpleView;
+        HideDisconnectedCheckBox.IsChecked = _settings.HideDisconnected;
         ApplySimpleView(_settings.SimpleView);
     }
 
     private void SaveSettings()
     {
-        _settings.MinimizeToTray = MinimizeToTrayCheckBox.IsChecked == true;
-        _settings.PinToDesktop = PinToDesktopCheckBox.IsChecked == true;
+        _settings.MinimizeToTray = MinimizeToTrayMenuItem.IsChecked == true;
+        _settings.PinToDesktop = PinToDesktopMenuItem.IsChecked == true;
         _settings.SimpleView = SimpleViewCheckBox.IsChecked == true;
+        _settings.HideDisconnected = HideDisconnectedCheckBox.IsChecked == true;
         SettingsService.Save(_settings);
     }
 
@@ -116,7 +133,7 @@ public partial class MainWindow : Window
 
     private void PinToDesktop_Click(object sender, RoutedEventArgs e)
     {
-        var pin = PinToDesktopCheckBox.IsChecked == true;
+        var pin = PinToDesktopMenuItem.IsChecked == true;
         ApplyPinToDesktop(pin);
         SaveSettings();
         StatusText.Text = pin ? "Pinned to desktop" : "Unpinned from desktop";
@@ -124,7 +141,7 @@ public partial class MainWindow : Window
 
     private void DarkMode_Click(object sender, RoutedEventArgs e)
     {
-        var dark = DarkModeCheckBox.IsChecked == true;
+        var dark = DarkModeMenuItem.IsChecked == true;
         ThemeService.Apply(dark);
         ApplyTrayMenuTheme();
 
@@ -160,6 +177,22 @@ public partial class MainWindow : Window
         }
     }
 
+    private void HideDisconnected_Click(object sender, RoutedEventArgs e)
+    {
+        SaveSettings();
+        _adapterView?.Refresh();
+        UpdateAdapterCount();
+    }
+
+    // A disabled adapter is never filtered out, whatever this setting says. Switching
+    // one back on is the point of the app, and hiding it would put the row you just
+    // toggled off out of reach the moment you toggled it.
+    private bool IsAdapterVisible(object item) =>
+        !_settings.HideDisconnected
+        || item is not AdapterViewModel adapter
+        || adapter.IsConnected
+        || !adapter.IsEnabled;
+
     private void SimpleView_Click(object sender, RoutedEventArgs e)
     {
         ApplySimpleView(SimpleViewCheckBox.IsChecked == true);
@@ -184,39 +217,78 @@ public partial class MainWindow : Window
         UpdateWindowSizing();
     }
 
+    // Remembers the height the user picked, so leaving simple view restores it.
+    //
+    // Mode switches resize the window too and come through here as well; capturing
+    // those was the bug behind the window creeping smaller on every round trip. A
+    // programmatic shrink got recorded as the height to restore, MinHeight then
+    // clamped the restore, and each trip baked the loss in -- which showed up as a
+    // cramped list once there were more adapters than the shortened window could hold.
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_isAdjustingSize || SizeToContent != SizeToContent.Manual) return;
+
+        if (e.HeightChanged && e.NewSize.Height > 0)
+            _detailViewHeight = e.NewSize.Height;
+    }
+
     // The adapter list sits in a star-sized row, so the window holds its full height
     // whatever the content needs. Simple view rows are a third as tall, which left a
     // dead band of empty card below the last adapter; sizing to content removes it.
-    // MinHeight has to drop first, or the shrink floors at the XAML minimum, and
-    // MaxHeight has to be capped, or a long adapter list grows past the screen.
     //
     // Only the adapter list is measured this way. The route table would size to every
     // row it holds and snap the window to the full screen height, so the other tabs
     // keep the fixed height.
     private void UpdateWindowSizing()
     {
-        if (SimpleViewCheckBox.IsChecked == true && MainTabs.SelectedIndex == 0)
-        {
-            if (SizeToContent == SizeToContent.Manual)
-                _detailViewHeight = ActualHeight > 0 ? ActualHeight : Height;
+        var fitToContent = SimpleViewCheckBox.IsChecked == true && MainTabs.SelectedIndex == 0;
 
+        // Already in the right mode: leave the window exactly as the user left it.
+        if (fitToContent == (SizeToContent == SizeToContent.Height)) return;
+
+        _isAdjustingSize = true;
+
+        if (fitToContent)
+        {
+            // MinHeight has to drop or the shrink floors at the XAML minimum, and
+            // MaxHeight has to be capped or a long adapter list grows past the screen.
             MinHeight = 0;
             MaxHeight = SystemParameters.WorkArea.Height;
             SizeToContent = SizeToContent.Height;
-            return;
+        }
+        else
+        {
+            // Height is assigned before SizeToContent is released, so the first layout
+            // pass already targets the restored size instead of settling at MinHeight
+            // on the way there. All four assignments land before any layout runs.
+            Height = _detailViewHeight;
+            MinHeight = DetailViewMinHeight;
+            MaxHeight = double.PositiveInfinity;
+            SizeToContent = SizeToContent.Manual;
         }
 
-        SizeToContent = SizeToContent.Manual;
-        MinHeight = DetailViewMinHeight;
-        MaxHeight = double.PositiveInfinity;
-
-        if (_detailViewHeight > 0)
-            Height = _detailViewHeight;
+        // SizeChanged is raised during the layout pass these assignments trigger, and
+        // that pass runs after this method returns -- so the guard cannot be cleared
+        // synchronously. Loaded priority is serviced once layout and render are done.
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Loaded,
+            () => _isAdjustingSize = false);
     }
 
-    private void SettingCheckBox_Click(object sender, RoutedEventArgs e)
+    private void SettingMenuItem_Click(object sender, RoutedEventArgs e)
     {
         SaveSettings();
+    }
+
+    // Left-clicking the gear opens its own context menu. Declaring the menu on the
+    // button keeps the two in one place; only the placement has to be set by hand,
+    // since WPF positions it at the pointer for a right-click.
+    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        SettingsMenu.PlacementTarget = SettingsButton;
+        SettingsMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        SettingsMenu.HorizontalOffset = 0;
+        SettingsMenu.IsOpen = true;
     }
 
     private void SetupTrayIcon()
@@ -303,13 +375,21 @@ public partial class MainWindow : Window
                 _adapters.Add(a);
             }
 
-            var enabled = _adapters.Count(a => a.IsEnabled);
-            StatusText.Text = $"{_adapters.Count} adapters found  ·  {enabled} enabled";
+            UpdateAdapterCount();
         }
         catch (Exception ex)
         {
             StatusText.Text = $"Error: {ex.Message}";
         }
+    }
+
+    private void UpdateAdapterCount()
+    {
+        var enabled = _adapters.Count(a => a.IsEnabled);
+        var hidden = _adapters.Count(a => !IsAdapterVisible(a));
+        var hiddenNote = hidden > 0 ? $"  ·  {hidden} hidden" : "";
+
+        StatusText.Text = $"{_adapters.Count} adapters found  ·  {enabled} enabled{hiddenNote}";
     }
 
     private void SaveAdapterOrder()
@@ -529,7 +609,7 @@ public partial class MainWindow : Window
 
     private void Window_StateChanged(object sender, EventArgs e)
     {
-        if (WindowState == WindowState.Minimized && MinimizeToTrayCheckBox.IsChecked == true)
+        if (WindowState == WindowState.Minimized && MinimizeToTrayMenuItem.IsChecked == true)
         {
             if (_isPinnedToDesktop)
                 ApplyPinToDesktop(false);
@@ -539,7 +619,7 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (MinimizeToTrayCheckBox.IsChecked == true)
+        if (MinimizeToTrayMenuItem.IsChecked == true)
         {
             e.Cancel = true;
             if (_isPinnedToDesktop)
@@ -582,14 +662,20 @@ public partial class MainWindow : Window
 
     private void AdapterList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (!IsOnDragHandle(e, AdapterList)) return;
+        // Whether the press landed on a handle has to be remembered, not just acted on.
+        // Without it, a later press anywhere in the list -- the second click of a
+        // double-click, say -- would reach the move handler and reorder whichever row
+        // happened to sit under the stale start point.
+        _dragHandleArmed = IsOnDragHandle(e, AdapterList);
+        if (!_dragHandleArmed) return;
+
         _dragStartPoint = e.GetPosition(AdapterList);
         _isDragging = false;
     }
 
     private void AdapterList_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _isDragging)
+        if (!_dragHandleArmed || e.LeftButton != MouseButtonState.Pressed || _isDragging)
             return;
 
         var pos = e.GetPosition(AdapterList);
@@ -602,13 +688,44 @@ public partial class MainWindow : Window
             return;
 
         _isDragging = true;
-        DragDrop.DoDragDrop(AdapterList, adapter, DragDropEffects.Move);
-        _isDragging = false;
+        ShowDragGhost(item);
+        try
+        {
+            DragDrop.DoDragDrop(AdapterList, adapter, DragDropEffects.Move);
+        }
+        finally
+        {
+            HideDragGhost();
+            _isDragging = false;
+            _dragHandleArmed = false;
+        }
     }
 
     private void AdapterList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         _isDragging = false;
+        _dragHandleArmed = false;
+    }
+
+    private void ShowDragGhost(ListBoxItem item)
+    {
+        var layer = AdornerLayer.GetAdornerLayer(AdapterList);
+        if (layer == null) return;
+
+        // Where in the row the pointer took hold, so the ghost keeps that grip rather
+        // than snapping its top edge to the cursor.
+        var rowTop = item.TranslatePoint(new System.Windows.Point(0, 0), AdapterList).Y;
+        _dragGhost = new DragGhostAdorner(AdapterList, item, _dragStartPoint.Y - rowTop);
+        layer.Add(_dragGhost);
+        _dragGhost.UpdatePosition(_dragStartPoint);
+    }
+
+    private void HideDragGhost()
+    {
+        if (_dragGhost == null) return;
+
+        AdornerLayer.GetAdornerLayer(AdapterList)?.Remove(_dragGhost);
+        _dragGhost = null;
     }
 
     private void AdapterList_DragOver(object sender, DragEventArgs e)
@@ -621,6 +738,7 @@ public partial class MainWindow : Window
         }
         e.Effects = DragDropEffects.Move;
         e.Handled = true;
+        _dragGhost?.UpdatePosition(e.GetPosition(AdapterList));
     }
 
     private void AdapterList_Drop(object sender, DragEventArgs e)
