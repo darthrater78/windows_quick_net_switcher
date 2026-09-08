@@ -115,13 +115,19 @@ public partial class MainWindow : Window
     }
 
     // Simple view strips the window back to what it is for: a list of connection names
-    // and their toggles. Header and status bar go with the per-adapter detail; the
-    // toolbar stays, since it carries the switch back out.
+    // and their toggles. Header, status bar and the two settings checkboxes all go;
+    // the simple-view checkbox itself has to stay, since it is the way back out.
+    //
+    // The hidden checkboxes keep their IsChecked state, so minimize-to-tray and
+    // pin-to-desktop go on behaving exactly as they did -- SaveSettings, the window
+    // state handler and the close handler all read them while they are collapsed.
     private void ApplySimpleView(bool simple)
     {
         var chrome = simple ? Visibility.Collapsed : Visibility.Visible;
         HeaderPanel.Visibility = chrome;
         StatusBar.Visibility = chrome;
+        MinimizeToTrayCheckBox.Visibility = chrome;
+        PinToDesktopCheckBox.Visibility = chrome;
 
         foreach (var adapter in _adapters)
             adapter.SimpleView = simple;

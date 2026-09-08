@@ -16,7 +16,8 @@ Branch: claude/windows-registry-adapter-simple-view-xftg6g
 📄 DOCS       ✅ v1.3.0 changelog entry; new "Why there is no start with Windows"
               section; feature list, How It Works, local-state table, known
               limitations, architecture tree and layering notes all corrected
-📦 RELEASE    ⏳ awaiting commit approval, then PR
+📦 RELEASE    ⏳ first commit pushed (240229e); toolbar follow-up awaiting
+              approval, then PR
 🚀 SHIP       ⬜ merge + tag + CI publish. Tag push goes to the user (container
               creds are commonly denied on refs/tags/*)
 
@@ -45,7 +46,13 @@ administrator on the next logon. No code signature makes the swap visible.
 
 **2. Simple view.**
 Collapses each adapter row to the connection name and its toggle, and hides the
-header and status bar. Persisted in settings.json.
+header, the status bar and the minimize-to-tray and pin-to-desktop checkboxes --
+leaving the simple-view checkbox and Refresh. The checkbox stays because it is
+the only way back out. Persisted in settings.json.
+
+Hiding a checkbox does not change its IsChecked state, so minimize-to-tray and
+pin-to-desktop keep working: SaveSettings, Window_StateChanged and
+Window_Closing all read them while collapsed.
 
 - AdapterViewModel.cs      SimpleView + ShowDetails/ShowIpRow/ShowDnsRow, INPC
 - MainWindow.xaml          three detail rows bound to the new flags; toggle

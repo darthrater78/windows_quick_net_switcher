@@ -24,7 +24,7 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 **General**
 - System tray icon — minimize to tray and keep it running in the background
 - Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
-- Simple view — strip the adapter list down to connection names and their toggles, and hide the header and status bar
+- Simple view — strip the window down to connection names and their toggles, hiding the header, the status bar and the other toolbar settings
 - Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, simple-view)
 - Custom app icon and Windows 11-inspired UI
 - Status bar links to the project on GitHub and to the running version's release notes
@@ -220,7 +220,7 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 - **Route Table:** WMI queries the system route table and resolves adapter indexes to friendly names for display.
 - **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`.
 - **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
-- **Simple view:** A flag on each `AdapterViewModel` collapses the status, address and DNS rows of the adapter template, leaving the name and its toggle; the window's header and status bar are collapsed alongside them. The toolbar stays visible, since it carries the switch back out.
+- **Simple view:** A flag on each `AdapterViewModel` collapses the status, address and DNS rows of the adapter template, leaving the name and its toggle. The header, the status bar and the minimize-to-tray and pin-to-desktop checkboxes are collapsed alongside them, leaving the simple-view checkbox and Refresh — the checkbox has to stay, since it is the way back out. Hidden checkboxes keep their state, so minimize-to-tray and pin-to-desktop go on behaving exactly as before.
 - **Settings:** All toolbar toggles are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
 - **Status bar links:** URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
 - The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, metric, and firewall changes all require it.
@@ -298,7 +298,7 @@ on refresh.
 - Removed "Start with Windows". It never worked — the shell launches `HKCU\...\Run` entries unelevated, and this app is manifested `requireAdministrator`, so Windows discarded the entry at every logon without an error. The registry value was written and the app never started
 - It was removed rather than fixed: the mechanism that works is a scheduled task at `RunLevel=HighestAvailable`, which would start this process as administrator at every logon with no UAC prompt. Anyone able to overwrite the unsigned executable — trivial while it sits in `Downloads` — would get administrator on the next logon. See [Why there is no "start with Windows"](#why-there-is-no-start-with-windows)
 - The leftover `Run` value from v1.1.0–v1.2.1 is deleted on first run of this version
-- New "Simple view" toggle: collapses each adapter row to its connection name and toggle, and hides the header and status bar. The setting is remembered between sessions
+- New "Simple view" toggle: collapses each adapter row to its connection name and toggle, and hides the header, the status bar and the minimize-to-tray and pin-to-desktop checkboxes — leaving the simple-view checkbox and Refresh. Hidden settings keep working; only their controls are out of the way. The setting is remembered between sessions
 - Toolbar checkboxes now reflow instead of clipping when the window is narrow
 
 ### v1.2.1 — 2026-09-08
