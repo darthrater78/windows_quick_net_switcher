@@ -404,11 +404,33 @@
         <Border Grid.Row="3"
                 Margin="0,8,0,0"
                 Padding="8,4">
-            <TextBlock x:Name="StatusText"
-                       Text="Ready"
-                       FontSize="11"
-                       Foreground="{StaticResource TextSecondaryBrush}"
-                       HorizontalAlignment="Left" />
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="GitHub"
+                            Click="GitHubLink_Click"
+                            FontSize="11"
+                            Padding="0"
+                            Margin="0,0,12,0"
+                            Cursor="Hand"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{StaticResource AccentBrush}" />
+                    <Button Content="Release Notes"
+                            Click="ReleaseNotesLink_Click"
+                            FontSize="11"
+                            Padding="0"
+                            Cursor="Hand"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{StaticResource AccentBrush}" />
+                </StackPanel>
+                <TextBlock x:Name="StatusText"
+                           Text="Ready"
+                           FontSize="11"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           TextTrimming="CharacterEllipsis"
+                           HorizontalAlignment="Left" />
+            </DockPanel>
         </Border>
     </Grid>
 </Window>

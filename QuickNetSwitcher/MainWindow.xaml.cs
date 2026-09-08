@@ -2,7 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -16,6 +18,19 @@ namespace QuickNetSwitcher;
 
 public partial class MainWindow : Window
 {
+    private const string RepositoryUrl = "https://github.com/darthrater78/windows_quick_net_switcher";
+
+    private static string ReleaseNotesUrl
+    {
+        get
+        {
+            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            return version is null
+                ? $"{RepositoryUrl}/releases"
+                : $"{RepositoryUrl}/releases/tag/v{version.Major}.{version.Minor}.{version.Build}";
+        }
+    }
+
     private WinForms.NotifyIcon? _trayIcon;
     private List<RouteEntry> _allRoutes = new();
     private ObservableCollection<AdapterViewModel> _adapters = new();
@@ -363,6 +378,29 @@ public partial class MainWindow : Window
     private void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
         RefreshCurrentTab();
+    }
+
+    private void GitHubLink_Click(object sender, RoutedEventArgs e) => OpenUrl(RepositoryUrl);
+
+    private void ReleaseNotesLink_Click(object sender, RoutedEventArgs e) => OpenUrl(ReleaseNotesUrl);
+
+    private void OpenUrl(string url)
+    {
+        try
+        {
+            // The app runs elevated (requireAdministrator), and shell-executing the URL
+            // here would open the default browser as administrator too. Handing it to
+            // explorer.exe instead delegates to the already-running user-level shell, so
+            // the browser opens unelevated.
+            using var browser = Process.Start(new ProcessStartInfo("explorer.exe", url)
+            {
+                UseShellExecute = false
+            });
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Couldn't open link: {ex.Message}";
+        }
     }
 
     private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
