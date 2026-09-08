@@ -58,12 +58,30 @@
                         </Style>
                     </Button.Resources>
                 </Button>
-                <CheckBox x:Name="MinimizeToTrayCheckBox"
-                          Content="Minimize to tray"
-                          IsChecked="True"
-                          VerticalAlignment="Center"
-                          Foreground="{StaticResource TextSecondaryBrush}"
-                          FontSize="12" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <CheckBox x:Name="MinimizeToTrayCheckBox"
+                              Content="Minimize to tray"
+                              IsChecked="True"
+                              VerticalAlignment="Center"
+                              Foreground="{StaticResource TextSecondaryBrush}"
+                              FontSize="12"
+                              Margin="0,0,16,0"
+                              Click="SettingCheckBox_Click" />
+                    <CheckBox x:Name="PinToDesktopCheckBox"
+                              Content="Pin to desktop"
+                              IsChecked="True"
+                              VerticalAlignment="Center"
+                              Foreground="{StaticResource TextSecondaryBrush}"
+                              FontSize="12"
+                              Margin="0,0,16,0"
+                              Click="PinToDesktop_Click" />
+                    <CheckBox x:Name="StartWithWindowsCheckBox"
+                              Content="Start with Windows"
+                              VerticalAlignment="Center"
+                              Foreground="{StaticResource TextSecondaryBrush}"
+                              FontSize="12"
+                              Click="StartWithWindows_Click" />
+                </StackPanel>
             </DockPanel>
         </Border>
 

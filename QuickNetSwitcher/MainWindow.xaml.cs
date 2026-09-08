@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Interop;
 using System.Drawing;
 using WinForms = System.Windows.Forms;
 
@@ -21,11 +22,14 @@ public partial class MainWindow : Window
     private System.Windows.Point _dragStartPoint;
     private bool _isDragging;
     private bool _firewallLoaded;
+    private AppSettings _settings = new();
+    private bool _isPinnedToDesktop;
 
     public MainWindow()
     {
         InitializeComponent();
         SetupTrayIcon();
+        LoadSettings();
         AdapterList.ItemsSource = _adapters;
         LoadAdapters();
 
@@ -37,8 +41,65 @@ public partial class MainWindow : Window
                 Show();
                 Activate();
                 Focus();
+
+                if (_settings.PinToDesktop)
+                    ApplyPinToDesktop(true);
             });
         };
+    }
+
+    private void LoadSettings()
+    {
+        _settings = SettingsService.Load();
+        MinimizeToTrayCheckBox.IsChecked = _settings.MinimizeToTray;
+        PinToDesktopCheckBox.IsChecked = _settings.PinToDesktop;
+        StartWithWindowsCheckBox.IsChecked = _settings.StartWithWindows;
+    }
+
+    private void SaveSettings()
+    {
+        _settings.MinimizeToTray = MinimizeToTrayCheckBox.IsChecked == true;
+        _settings.PinToDesktop = PinToDesktopCheckBox.IsChecked == true;
+        _settings.StartWithWindows = StartWithWindowsCheckBox.IsChecked == true;
+        SettingsService.Save(_settings);
+    }
+
+    private void ApplyPinToDesktop(bool pin)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+
+        if (pin)
+        {
+            DesktopPinService.PinToDesktop(hwnd);
+            _isPinnedToDesktop = true;
+        }
+        else
+        {
+            DesktopPinService.UnpinFromDesktop(hwnd);
+            _isPinnedToDesktop = false;
+        }
+    }
+
+    private void PinToDesktop_Click(object sender, RoutedEventArgs e)
+    {
+        var pin = PinToDesktopCheckBox.IsChecked == true;
+        ApplyPinToDesktop(pin);
+        SaveSettings();
+        StatusText.Text = pin ? "Pinned to desktop" : "Unpinned from desktop";
+    }
+
+    private void StartWithWindows_Click(object sender, RoutedEventArgs e)
+    {
+        var enable = StartWithWindowsCheckBox.IsChecked == true;
+        StartupService.SetEnabled(enable);
+        SaveSettings();
+        StatusText.Text = enable ? "Will start with Windows" : "Will not start with Windows";
+    }
+
+    private void SettingCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        SaveSettings();
     }
 
     private void SetupTrayIcon()
@@ -92,6 +153,9 @@ public partial class MainWindow : Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
+
+        if (_settings.PinToDesktop)
+            ApplyPinToDesktop(true);
     }
 
     private void RefreshCurrentTab()
@@ -320,7 +384,11 @@ public partial class MainWindow : Window
     private void Window_StateChanged(object sender, EventArgs e)
     {
         if (WindowState == WindowState.Minimized && MinimizeToTrayCheckBox.IsChecked == true)
+        {
+            if (_isPinnedToDesktop)
+                ApplyPinToDesktop(false);
             Hide();
+        }
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -328,10 +396,14 @@ public partial class MainWindow : Window
         if (MinimizeToTrayCheckBox.IsChecked == true)
         {
             e.Cancel = true;
+            if (_isPinnedToDesktop)
+                ApplyPinToDesktop(false);
             Hide();
             return;
         }
 
+        if (_isPinnedToDesktop)
+            ApplyPinToDesktop(false);
         _trayIcon?.Dispose();
         _trayIcon = null;
     }
