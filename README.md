@@ -32,7 +32,12 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 
 ## Screenshot
 
-> *Coming soon — build and run the app to see it in action.*
+<img width="615" height="342" alt="image" src="https://github.com/user-attachments/assets/8e77fe59-fff6-41b2-a38e-7815014a7144" />
+<img width="608" height="345" alt="image" src="https://github.com/user-attachments/assets/4a75528e-6c74-428e-a010-45addb2b1135" />
+<img width="614" height="414" alt="image" src="https://github.com/user-attachments/assets/ea87e862-0dd3-47fa-94d0-cc03aa8587ed" />
+
+
+
 
 ## Download
 
