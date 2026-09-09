@@ -12,7 +12,7 @@ Branch: claude/quick-net-switcher-v1-3-0-l8p9mj (based on 8c92c12, the v1.3.0 ti
               net8.0-windows WPF target, Linux container. CI on the eventual PR is
               the first real compile. Runtime behaviour is verified only by the
               user running the build
-🔒 SECURITY   ✅ 0 Critical, 0 High on the current diff
+🔒 SECURITY   ✅ 0 Critical, 0 High on the current diff — see Gate 3 detail
 📄 DOCS       ⬜ owed once the fixes are complete — README behaviour claims and the
               v1.3.0 Version History entry both need the refresh and the
               disabled/disconnected correction
@@ -53,15 +53,55 @@ bug 2, and an ICollectionView filter that is not re-evaluated when an item's own
 properties change -- so a row that just dropped its link stays visible until the
 view is explicitly refreshed.
 
-Done so far (this commit): AdapterViewModel.UpdateFrom for in-place refresh, and
-ShowStatusRow/ShowSpeed/ShowMac so the status word survives simple view on any row
-that is not connected.
+All three are now written:
+- NetworkAdapterService: isEnabled from ConfigManagerErrorCode != 22 && status != 5;
+  DescribeStatus lifted out of the inline switch; status 0 reworded "Not connected"
+  to match Network Connections; speed no longer gated on the old isEnabled
+- AdapterViewModel: StatusKind collapses 13 NetConnectionStatus codes into the 4
+  states a row can show, so the dot has a case for all of them (status 7 used to
+  fall through to the "unknown" colour); UpdateFrom for in-place refresh;
+  ShowStatusRow/ShowSpeed/ShowMac keep the status word in simple view
+- MainWindow: StartAdapterWatch (NetworkChange events, 750ms debounce, 10s backstop
+  scoped to IsWatchingAdapters), RefreshAdaptersAsync off-thread, MergeAdapters in
+  place with an explicit _adapterView.Refresh(), hidden count on the checkbox label,
+  handlers released in Window_Closing
+- MainWindow.xaml: dot triggers on StatusKind, status row visibility on
+  ShowStatusRow, Refresh button tooltip carries the note about self-refreshing
+- README: feature list, three How It Works entries, layering and threading notes
+  corrected (both described the old rebuild-on-refresh behaviour), v1.3.0 entry
 
-Still to write: the NetworkAdapterService fix, StatusKind for the dot colour (13
-NetConnectionStatus codes collapse to 4 display states; today status 7 falls
-through to the "unknown" colour), the refresh loop and merge in MainWindow, the
-hidden-count feedback on the checkbox label (the status bar carrying it is hidden
-in simple view), and the docs.
+## Gate 3 detail
+Security: no new input, no process launch, no network, no new dependency. The
+service reads one more property from the WMI query it already ran.
+SetAdapterState is untouched and still validates that adapterId parses as an int
+before it reaches the WQL string. The refresh subscribes to two OS events that
+carry no payload we consume -- they only prompt a re-read -- and both are detached
+in Window_Closing, since NetworkChange's events are static and would otherwise
+hold the window for the life of the process. The one behavioural security
+improvement: the toggle now reflects the device state rather than the connection
+state, so it no longer offers to "enable" an adapter that is already enabled.
+
+Quality: the merge is a dictionary lookup per adapter, not a nested scan. The WMI
+read moved off the UI thread because it now runs unattended. MergeAdapters returns
+early when nothing changed, so an idle machine does no view work every 10s. The
+timer does not run while the list is off screen.
+
+## Build-by-inspection (Gate 2 cannot run here)
+- XAML: all six XML files re-parse clean; every binding the adapter template uses
+  resolves to a public member of AdapterViewModel (checked by grep)
+- `(_, _) =>` lambda discards already appear in this file, so the form is proven
+- DispatcherTimer is fully qualified rather than importing System.Windows.Threading,
+  matching how the file already qualifies DispatcherPriority, and avoiding a
+  `Dispatcher` type name sitting next to the inherited Dispatcher property
+- QueueAdapterRefresh is an expression-bodied void whose expression is an
+  invocation -- a statement expression, so the discarded DispatcherOperation is fine
+- Dictionary.Remove(key, out value) exists on .NET Core 2.0+; MaybeNullWhen(false)
+  means `info` is not null inside the true branch, so no CS8604
+- Brace and paren balance unchanged from the CI-green HEAD (both read -1 braces
+  under the same crude counter, i.e. an artifact of the counter, not a change)
+- NOT verified: runtime behaviour. No dotnet SDK here. Whether the Bluetooth row
+  now reads correctly, and whether the refresh actually fires on a Wi-Fi drop, can
+  only be seen by running the build
 
 ## Decisions the next session must respect
 - Start-with-Windows stays removed. A RunLevel=HighestAvailable logon task is a

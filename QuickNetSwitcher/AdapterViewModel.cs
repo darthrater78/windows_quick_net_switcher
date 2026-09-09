@@ -33,6 +33,21 @@ public class AdapterViewModel : INotifyPropertyChanged
     // network; everything else NetConnectionStatus reports is some flavour of not.
     public bool IsConnected => Status == "Connected";
 
+    // Mid-transition, on its way to connected or away from it.
+    private bool IsBusy =>
+        Status is "Connecting" or "Disconnecting" or "Authenticating" or "Authentication succeeded";
+
+    // The thirteen NetConnectionStatus values collapse into the four states a row can
+    // actually show. The status dot used to trigger off the status word itself, which
+    // had a case for three of them -- an unplugged cable ("Media disconnected") or a
+    // failed authentication fell through to the "unknown" colour rather than reading as
+    // a disconnection.
+    public string StatusKind =>
+        !IsEnabled ? "Disabled"
+        : IsConnected ? "Connected"
+        : IsBusy ? "Working"
+        : "Disconnected";
+
     private bool _simpleView;
 
     // Simple view strips the row back to the connection name and its toggle. The flag

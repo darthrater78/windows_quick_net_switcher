@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
@@ -51,6 +52,14 @@ public partial class MainWindow : Window
     private double _detailViewHeight;
     private bool _isAdjustingSize;
 
+    // Windows reports network changes as events; the timer behind them is a backstop,
+    // not the mechanism. See StartAdapterWatch.
+    private readonly System.Windows.Threading.DispatcherTimer _autoRefreshTimer =
+        new() { Interval = TimeSpan.FromSeconds(10) };
+    private readonly System.Windows.Threading.DispatcherTimer _networkChangeDebounce =
+        new() { Interval = TimeSpan.FromMilliseconds(750) };
+    private bool _refreshInFlight;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -66,6 +75,7 @@ public partial class MainWindow : Window
         _adapterView = CollectionViewSource.GetDefaultView(_adapters);
         _adapterView.Filter = IsAdapterVisible;
         LoadAdapters();
+        StartAdapterWatch();
 
         // "Start with Windows" was removed in v1.3.0; drop the value it left behind.
         _ = Task.Run(LegacyStartupCleanup.RemoveRunEntry);
@@ -383,6 +393,147 @@ public partial class MainWindow : Window
         }
     }
 
+    // Coming off Wi-Fi used to leave the list showing a connection that was no longer
+    // there: adapter state was read once at load and never again, so nothing on screen
+    // moved until the user pressed Refresh -- which is also why "hide disconnected"
+    // looked broken, since it was filtering a snapshot taken before the link dropped.
+    //
+    // Windows already announces this. NetworkAddressChanged and
+    // NetworkAvailabilityChanged are OS notifications, not a poll, and they cover the
+    // case that matters. A single disconnect raises several of them, and they arrive on
+    // a thread pool thread, so they are marshalled to the UI thread and collapsed into
+    // one refresh once the burst settles.
+    //
+    // The 10s timer behind them is a backstop for the changes those events do not
+    // raise -- an adapter enabled or disabled from Network Connections, a speed or
+    // metric change -- and it runs only while the adapter list is on screen. Nothing
+    // ticks while the window is in the tray, minimised, or on another tab.
+    private void StartAdapterWatch()
+    {
+        _networkChangeDebounce.Tick += (_, _) =>
+        {
+            _networkChangeDebounce.Stop();
+            if (IsWatchingAdapters)
+                _ = RefreshAdaptersAsync();
+        };
+
+        _autoRefreshTimer.Tick += (_, _) => _ = RefreshAdaptersAsync();
+
+        NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
+        NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
+
+        IsVisibleChanged += (_, _) => UpdateAutoRefreshState();
+        UpdateAutoRefreshState();
+    }
+
+    private void OnNetworkAddressChanged(object? sender, EventArgs e) => QueueAdapterRefresh();
+
+    private void OnNetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs e) =>
+        QueueAdapterRefresh();
+
+    private void QueueAdapterRefresh() =>
+        Dispatcher.InvokeAsync(() =>
+        {
+            // Restarted, not started: a burst of notifications should produce one
+            // refresh after it settles rather than one refresh each.
+            _networkChangeDebounce.Stop();
+            _networkChangeDebounce.Start();
+        });
+
+    private bool IsWatchingAdapters =>
+        IsVisible && WindowState != WindowState.Minimized && MainTabs.SelectedIndex == 0;
+
+    private void UpdateAutoRefreshState()
+    {
+        if (IsWatchingAdapters == _autoRefreshTimer.IsEnabled) return;
+
+        if (IsWatchingAdapters)
+        {
+            _autoRefreshTimer.Start();
+
+            // Catch up on whatever changed while the list was out of sight, so it is
+            // current the moment it comes back instead of up to ten seconds stale.
+            _ = RefreshAdaptersAsync();
+        }
+        else
+        {
+            _autoRefreshTimer.Stop();
+        }
+    }
+
+    // The WMI queries take long enough to be felt, and this now runs unattended, so the
+    // read happens off the UI thread and only the merge touches the collection.
+    private async Task RefreshAdaptersAsync()
+    {
+        // Mid-drag a refresh would pull the row out from under the pointer, and two
+        // overlapping refreshes would merge the same snapshot twice.
+        if (_refreshInFlight || _isDragging) return;
+
+        _refreshInFlight = true;
+        try
+        {
+            var infos = await Task.Run(NetworkAdapterService.GetAdapters);
+
+            if (!_isDragging)
+                MergeAdapters(infos);
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _refreshInFlight = false;
+        }
+    }
+
+    // Updated in place rather than cleared and rebuilt. A rebuild every ten seconds
+    // would drop the selection, restart the row animations, and re-apply the saved
+    // order over whatever the user had just dragged; matching on AdapterId leaves the
+    // rows where they are and changes only the fields that moved.
+    private void MergeAdapters(List<AdapterInfo> infos)
+    {
+        var incoming = new Dictionary<string, AdapterInfo>();
+        foreach (var info in infos)
+            incoming[info.AdapterId] = info;
+
+        var changed = false;
+
+        for (var i = _adapters.Count - 1; i >= 0; i--)
+        {
+            var existing = _adapters[i];
+
+            if (incoming.Remove(existing.AdapterId, out var info))
+            {
+                changed |= existing.UpdateFrom(info);
+            }
+            else
+            {
+                // Gone from WMI altogether -- a USB adapter unplugged, say.
+                _adapters.RemoveAt(i);
+                changed = true;
+            }
+        }
+
+        // Anything left arrived since the last read. It goes on the end rather than into
+        // the saved order, which belongs to the user.
+        foreach (var info in incoming.Values)
+        {
+            var adapter = AdapterViewModel.FromInfo(info);
+            adapter.SimpleView = _settings.SimpleView;
+            _adapters.Add(adapter);
+            changed = true;
+        }
+
+        if (!changed) return;
+
+        // A filter is not re-evaluated when an item's own properties change, so an
+        // adapter that has just dropped its link stays on screen until the view is told
+        // to look again.
+        _adapterView?.Refresh();
+        UpdateAdapterCount();
+    }
+
     private void UpdateAdapterCount()
     {
         var enabled = _adapters.Count(a => a.IsEnabled);
@@ -390,6 +541,13 @@ public partial class MainWindow : Window
         var hiddenNote = hidden > 0 ? $"  ·  {hidden} hidden" : "";
 
         StatusText.Text = $"{_adapters.Count} adapters found  ·  {enabled} enabled{hiddenNote}";
+
+        // The status bar carrying that count is hidden in simple view, where the filter
+        // is most likely to be on. Without this, a row the filter removed and an adapter
+        // that genuinely vanished look identical.
+        HideDisconnectedCheckBox.Content = hidden > 0
+            ? $"Hide disconnected ({hidden})"
+            : "Hide disconnected";
     }
 
     private void SaveAdapterOrder()
@@ -594,6 +752,7 @@ public partial class MainWindow : Window
         if (!IsLoaded) return;
 
         UpdateWindowSizing();
+        UpdateAutoRefreshState();
 
         if (MainTabs.SelectedIndex == 1 && _allRoutes.Count == 0)
             LoadRoutes();
@@ -615,6 +774,8 @@ public partial class MainWindow : Window
                 ApplyPinToDesktop(false);
             Hide();
         }
+
+        UpdateAutoRefreshState();
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -630,6 +791,14 @@ public partial class MainWindow : Window
 
         if (_isPinnedToDesktop)
             ApplyPinToDesktop(false);
+
+        // NetworkChange's events are static: leaving them subscribed would hold this
+        // window alive for the life of the process.
+        NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
+        NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
+        _autoRefreshTimer.Stop();
+        _networkChangeDebounce.Stop();
+
         _trayIcon?.Dispose();
         _trayIcon = null;
     }

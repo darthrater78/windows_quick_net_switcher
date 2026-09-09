@@ -9,7 +9,8 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 ## Features
 
 **Adapters tab**
-- View all physical network adapters with real-time status, speed, MAC address, IP/CIDR, gateway, DNS suffix, and interface metric
+- View all physical network adapters with status, speed, MAC address, IP/CIDR, gateway, DNS suffix, and interface metric
+- The list keeps itself current: Windows announces network changes and the app reacts to them, so dropping off Wi-Fi or unplugging a cable shows up on its own, with a 10-second check behind that as a backstop
 - Toggle adapters on/off with a single click
 - Drag-to-reorder the adapter list, with a translucent ghost of the whole row following the pointer — order is remembered between launches
 - Hide disconnected adapters, to cut the list down to the ones actually carrying a network
@@ -25,7 +26,7 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 **General**
 - System tray icon — minimize to tray and keep it running in the background
 - Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
-- Simple view — strip the window down to connection names and their toggles, hiding the header and the status bar. The window shrinks to fit the list rather than keeping its full height
+- Simple view — strip the window down to connection names and their toggles, hiding the header and the status bar. The window shrinks to fit the list rather than keeping its full height. Any adapter that is not connected keeps its status word, so a disabled one still reads as disabled
 - Dark theme — follows the Windows app theme by default, with a toolbar toggle to override it. Both themes cover the window chrome, tabs, buttons, checkboxes, scrollbars, the route grid, the metric dialog, the title bar and the tray menu
 - Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, simple-view, and the theme once you pick one)
 - Custom app icon and Windows 11-inspired UI
@@ -219,11 +220,13 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 ## How It Works
 
 - **Adapters:** WMI (`Win32_NetworkAdapter`) discovers physical adapters and calls the `Enable()`/`Disable()` methods to toggle them. Adapter display order is persisted to a JSON file in `%LOCALAPPDATA%`. Interface metric is set via `netsh interface ipv4 set interface`.
+- **Disabled or just disconnected:** These are different states and WMI reports them with different properties. `ConfigManagerErrorCode == 22` (`CM_PROB_DISABLED`) is the device being switched off, which is what **Disable** in Network Connections does; `NetConnectionStatus` describes the connection on top of it. `NetEnabled` is deliberately not used for this, because it follows the connection rather than the device: an adapter that is enabled and merely idle — a Bluetooth PAN with nothing paired, an unplugged cable, Wi-Fi out of range — reports `NetEnabled = false`.
+- **Live status:** `NetworkChange.NetworkAddressChanged` and `NetworkAvailabilityChanged` are OS notifications rather than a poll, and they cover the case that matters — coming off a network. One disconnect raises several of them, on a thread pool thread, so they are marshalled to the UI thread and collapsed into a single refresh 750ms after the burst settles. A 10-second `DispatcherTimer` sits behind them as a backstop for changes those events do not raise (an adapter enabled or disabled from Network Connections, a speed or metric change); it runs only while the adapter list is actually on screen, so nothing ticks in the tray, minimised, or on another tab. A refresh updates the existing rows in place, matched on `DeviceID`, rather than rebuilding the list.
 - **Route Table:** WMI queries the system route table and resolves adapter indexes to friendly names for display.
 - **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`.
 - **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
-- **Simple view:** A flag on each `AdapterViewModel` collapses the status, address and DNS rows of the adapter template, leaving the name and its toggle. The header and the status bar are collapsed alongside them; the toolbar stays, since it occupies one row whether it carries one checkbox or four. The window also switches to `SizeToContent="Height"` so it fits the list instead of holding its full height; this applies only on the Adapters tab, since the route table would measure to every row it holds.
-- **Hide disconnected:** A filter on the adapter list's `ICollectionView`, so hidden adapters stay in the underlying collection and the saved display order keeps its full set. Disabled adapters are never filtered out — switching one back on is what the app is for, and hiding it would put the row you just toggled off out of reach.
+- **Simple view:** A flag on each `AdapterViewModel` collapses the description, address and DNS rows of the adapter template, leaving the name and its toggle. The status word survives for any adapter that is not connected: without it, a disabled adapter reads as a connected one whose toggle happens to be off. A connected row stays bare, since the green dot already says so. The header and the status bar are collapsed alongside them; the toolbar stays, since it occupies one row whether it carries one checkbox or four. The window also switches to `SizeToContent="Height"` so it fits the list instead of holding its full height; this applies only on the Adapters tab, since the route table would measure to every row it holds.
+- **Hide disconnected:** A filter on the adapter list's `ICollectionView`, so hidden adapters stay in the underlying collection and the saved display order keeps its full set. A filter is not re-evaluated when an item's own properties change, so the view is refreshed explicitly after a status update — otherwise an adapter that had just dropped its link would sit there until the list was rebuilt. Disabled adapters are never filtered out — switching one back on is what the app is for, and hiding it would put the row you just toggled off out of reach. The count of what the filter removed is shown on the checkbox itself, since the status bar carrying it is hidden in simple view.
 - **Reorder ghost:** Dragging a row's handle adds a `DragGhostAdorner` to the list's adorner layer, painting a translucent `VisualBrush` copy of the whole row that tracks the pointer. WPF supplies no drag visual of its own beyond the cursor.
 - **Theming:** Two `ResourceDictionary` palettes (`Themes/Light.xaml`, `Themes/Dark.xaml`) define the same key set, and `ThemeService` swaps one for the other in slot 0 of the application's merged dictionaries. Every colour is referenced with `DynamicResource`, so the swap propagates without rebuilding any window. The default comes from `AppsUseLightTheme` under `HKCU\...\Themes\Personalize`; clicking the toggle stores an explicit choice that stops following Windows. The title bar is darkened separately through `DwmSetWindowAttribute`, since the caption is drawn by the OS rather than WPF, and the tray menu is coloured by hand because Windows Forms sits outside WPF's resource system.
 - **Settings:** Minimize-to-tray, pin-to-desktop and the theme sit behind the toolbar's gear menu, since they are set once and left alone; hide-disconnected and simple view stay on the bar, because they change what you are looking at. All of them are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
@@ -273,10 +276,12 @@ The code splits into three layers with a deliberately simple shape:
 - **View models** (`AdapterViewModel`, `FirewallViewModel`) are plain display
   objects that map a service record to formatted strings (`IpDisplay`,
   `MetricDisplay`) and visibility flags (`HasIp`, `HasGateway`) for binding.
-  They are not full MVVM — there is no commanding, and the list is rebuilt on
-  refresh rather than updated in place. `AdapterViewModel` implements
-  `INotifyPropertyChanged` for exactly one property, `SimpleView`, which has to
-  change on an item that is already bound.
+  They are not full MVVM — there is no commanding. `AdapterViewModel` implements
+  `INotifyPropertyChanged`: `SimpleView` changes on items that are already bound,
+  and `UpdateFrom` re-reads a whole adapter record in place, raising one
+  empty-name change so every binding on the row re-reads. An automatic refresh
+  every few seconds is why the rows are updated rather than rebuilt — a rebuild
+  would drop the selection and re-apply the saved order over a drag in progress.
 - **`MainWindow`** holds the UI and all event handlers, and is the only place
   that coordinates between services and the view. At ~550 lines it is by far the
   largest file in the project.
@@ -286,9 +291,12 @@ The code splits into three layers with a deliberately simple shape:
 The three state-changing operations — adapter toggle, firewall toggle, and
 metric change — run on a background thread via `Task.Run` so a slow WMI or
 `netsh` call cannot freeze the UI, with the result marshalled back to update the
-status bar. The read paths (`LoadAdapters`, `LoadRoutes`, `LoadFirewall`) run
-synchronously on the UI thread, so a slow WMI query can briefly hitch the window
-on refresh.
+status bar. The automatic adapter refresh also reads off-thread, since it runs
+unattended and would otherwise hitch the window every few seconds; only the merge
+into the collection touches the UI thread. The read paths driven by an explicit
+user action (`LoadAdapters`, `LoadRoutes`, `LoadFirewall`) still run synchronously
+on the UI thread, so a slow WMI query can briefly hitch the window on a manual
+refresh.
 
 ### Notes on the current shape
 
@@ -310,6 +318,10 @@ on refresh.
 - New "Simple view" toggle: collapses each adapter row to its connection name and toggle, and hides the header and the status bar. The window shrinks to fit the list rather than keeping its full height, so there is no dead space below the last adapter
 - New dark theme, following the Windows app theme by default with a toolbar toggle to override it. WPF's stock chrome is painted for a light theme and cannot be recoloured through properties alone, so tabs, buttons, checkboxes and scrollbars are templated; the OS-drawn title bar is handled through `DwmSetWindowAttribute` and the Windows Forms tray menu is coloured directly. Contrast was checked against the surface each colour actually sits on rather than picked by eye
 - New "Hide disconnected" toggle, filtering the adapter list down to adapters that are actually connected. Disabled adapters are deliberately exempt: hiding them would make an adapter vanish the moment you switched it off, and switching it back on is what the app is for
+- Fixed disconnected adapters being reported as disabled. `NetEnabled` was read as "is this adapter switched on", but it follows the connection rather than the device, so an adapter that was enabled with nothing on the other end — a Bluetooth PAN with no device paired, an unplugged cable, Wi-Fi out of range — was labelled "Disabled" and drawn with its toggle off, offering to enable something that was already enabled. The disabled state now comes from `ConfigManagerErrorCode`, and the status dot covers every connection state instead of the three it had cases for
+- The adapter list now updates itself. Status was read once at load, so coming off Wi-Fi changed nothing on screen until Refresh was pressed — which also made "hide disconnected" look broken, since it was filtering a snapshot taken before the link dropped. The app now reacts to the network-change notifications Windows already raises, with a 10-second check behind them as a backstop, running only while the list is on screen
+- Fixed "hide disconnected" leaving a stale row on screen: an `ICollectionView` filter is not re-evaluated when an item's own properties change, so the view is now refreshed after a status update. The number of rows the filter removed is shown on the checkbox, which stays visible in simple view where the status bar does not
+- Simple view now keeps the status word on any adapter that is not connected, so a disabled adapter no longer reads as a connected one whose toggle happens to be off
 - Reordering an adapter now drags a translucent ghost of the whole row rather than the stock drag cursor
 - Fixed reordering triggering when it should not have: whether a press landed on a drag handle was acted on but not remembered, so a later press anywhere in the list — the second click of a double-click, for instance — could reorder whichever row sat under the stale start point
 - The GitHub and release-notes links moved from the status bar to the right-hand end of the tab strip, so they stay reachable in simple view

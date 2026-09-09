@@ -79,36 +79,33 @@ public static class NetworkAdapterService
             var adapterId = obj["DeviceID"]?.ToString() ?? "";
             var interfaceIndex = obj["InterfaceIndex"]?.ToString() ?? "";
             var adapterType = obj["AdapterType"]?.ToString() ?? "Unknown";
-            var netEnabled = obj["NetEnabled"];
-            bool isEnabled = netEnabled != null && (bool)netEnabled;
             var mac = obj["MACAddress"]?.ToString() ?? "";
 
-            var statusCode = obj["NetConnectionStatus"];
-            var status = "Disabled";
+            // -1 stands in for an adapter that reports no connection state at all.
+            var statusCode = obj["NetConnectionStatus"] is { } code ? Convert.ToInt32(code) : -1;
+
+            // Whether an adapter is switched on and whether anything is connected to it
+            // are different questions, and Win32_NetworkAdapter answers them with
+            // different properties.
+            //
+            // NetEnabled is not the one to ask. It follows the connection, not the
+            // device: an adapter that is enabled and simply idle -- a Bluetooth PAN with
+            // nothing paired, an unplugged cable, Wi-Fi out of range -- reports
+            // NetEnabled = false. Reading that as "disabled" labelled every idle adapter
+            // Disabled, drew its toggle off, and offered to enable a device that was
+            // already enabled.
+            //
+            // ConfigManagerErrorCode 22 is CM_PROB_DISABLED: the device actually being
+            // switched off, which is what Disable in Network Connections does.
+            // NetConnectionStatus 5 is that same state reported from the connection side.
+            var errorCode = obj["ConfigManagerErrorCode"] is { } cm ? Convert.ToUInt32(cm) : 0u;
+            bool isEnabled = errorCode != 22 && statusCode != 5;
+
+            var status = isEnabled ? DescribeStatus(statusCode) : "Disabled";
+
             var speed = "";
 
-            if (isEnabled && statusCode != null)
-            {
-                status = Convert.ToInt32(statusCode) switch
-                {
-                    0 => "Disconnected",
-                    1 => "Connecting",
-                    2 => "Connected",
-                    3 => "Disconnecting",
-                    4 => "Hardware not present",
-                    5 => "Hardware disabled",
-                    6 => "Hardware malfunction",
-                    7 => "Media disconnected",
-                    8 => "Authenticating",
-                    9 => "Authentication succeeded",
-                    10 => "Authentication failed",
-                    11 => "Invalid address",
-                    12 => "Credentials required",
-                    _ => "Unknown"
-                };
-            }
-
-            if (isEnabled && statusCode != null && Convert.ToInt32(statusCode) == 2)
+            if (statusCode == 2)
             {
                 var adapterSpeed = obj["Speed"];
                 if (adapterSpeed != null)
@@ -140,6 +137,28 @@ public static class NetworkAdapterService
 
         return adapters.OrderBy(a => a.Name).ToList();
     }
+
+    // NetConnectionStatus in words, matching what Network Connections itself shows
+    // where it shows anything. Only reached for an adapter that is enabled -- a
+    // disabled one is labelled from the device state instead, since its connection
+    // state says nothing useful.
+    private static string DescribeStatus(int statusCode) => statusCode switch
+    {
+        0 => "Not connected",
+        1 => "Connecting",
+        2 => "Connected",
+        3 => "Disconnecting",
+        4 => "Hardware not present",
+        5 => "Hardware disabled",
+        6 => "Hardware malfunction",
+        7 => "Media disconnected",
+        8 => "Authenticating",
+        9 => "Authentication succeeded",
+        10 => "Authentication failed",
+        11 => "Invalid address",
+        12 => "Credentials required",
+        _ => "Unknown"
+    };
 
     public static bool SetAdapterState(string adapterId, bool enable)
     {

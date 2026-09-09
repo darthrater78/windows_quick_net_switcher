@@ -46,6 +46,7 @@
                 <Button x:Name="RefreshButton"
                         Content="Refresh"
                         DockPanel.Dock="Right"
+                        ToolTip="The list also refreshes itself when Windows reports a network change, and every 10 seconds while this tab is open"
                         Click="RefreshButton_Click"
                         Padding="16,6"
                         Background="{DynamicResource AccentFillBrush}"
@@ -215,13 +216,13 @@
                                                     <Ellipse.Style>
                                                         <Style TargetType="Ellipse">
                                                             <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Status}" Value="Connected">
+                                                                <DataTrigger Binding="{Binding StatusKind}" Value="Connected">
                                                                     <Setter Property="Fill" Value="{DynamicResource EnabledBrush}" />
                                                                 </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Status}" Value="Disconnected">
+                                                                <DataTrigger Binding="{Binding StatusKind}" Value="Disconnected">
                                                                     <Setter Property="Fill" Value="{DynamicResource WarningBrush}" />
                                                                 </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Status}" Value="Disabled">
+                                                                <DataTrigger Binding="{Binding StatusKind}" Value="Disabled">
                                                                     <Setter Property="Fill" Value="{DynamicResource DisabledBrush}" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
@@ -236,24 +237,22 @@
                                             </DockPanel>
                                             <!-- Row 2: status + description -->
                                             <StackPanel Orientation="Horizontal" Margin="16,3,0,0"
-                                                        Visibility="{Binding ShowDetails, Converter={StaticResource BoolToVis}}">
-                                                <TextBlock FontSize="11"
-                                                           Foreground="{DynamicResource TextSecondaryBrush}">
-                                                    <TextBlock.Text>
-                                                        <MultiBinding StringFormat="{}{0}  ·  {1}">
-                                                            <Binding Path="Status" />
-                                                            <Binding Path="Description" />
-                                                        </MultiBinding>
-                                                    </TextBlock.Text>
-                                                </TextBlock>
+                                                        Visibility="{Binding ShowStatusRow, Converter={StaticResource BoolToVis}}">
+                                                <TextBlock Text="{Binding Status}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                <TextBlock Text="{Binding Description, StringFormat='  ·  {0}'}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           Visibility="{Binding ShowDetails, Converter={StaticResource BoolToVis}}" />
                                                 <TextBlock Text="{Binding Speed, StringFormat='  ·  {0}'}"
                                                            FontSize="11"
                                                            Foreground="{DynamicResource TextSecondaryBrush}"
-                                                           Visibility="{Binding HasSpeed, Converter={StaticResource BoolToVis}}" />
+                                                           Visibility="{Binding ShowSpeed, Converter={StaticResource BoolToVis}}" />
                                                 <TextBlock Text="{Binding MacAddress, StringFormat='  ·  {0}'}"
                                                            FontSize="11"
                                                            Foreground="{DynamicResource TextSecondaryBrush}"
-                                                           Visibility="{Binding HasMac, Converter={StaticResource BoolToVis}}" />
+                                                           Visibility="{Binding ShowMac, Converter={StaticResource BoolToVis}}" />
                                             </StackPanel>
                                             <!-- Row 3: IP / CIDR / Gateway / Metric -->
                                             <StackPanel Orientation="Horizontal" Margin="16,2,0,0"
