@@ -22,7 +22,12 @@ public static class ThemeService
     private const int DwmImmersiveDarkMode = 20;
     private const int DwmImmersiveDarkModeBefore20H1 = 19;
 
+    // Pinned to System32: the default search order looks in the application's own
+    // directory first, and dwmapi is not one of the KnownDLLs Windows protects, so a
+    // copy planted beside the exe would be loaded into this elevated process. Same
+    // vector as the bare-name netsh launch fixed in v1.2.1.
     [DllImport("dwmapi.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
     /// <summary>The theme currently applied.</summary>

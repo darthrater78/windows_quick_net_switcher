@@ -132,6 +132,15 @@ searches the calling application's own directory before `System32`: a bare
 administrator rights, since the process is elevated. Resolving from the Windows
 directory, which only administrators can write to, removes that path.
 
+The same search order applies to DLLs, so every `DllImport` of a library outside
+Windows' protected `KnownDLLs` list is pinned with
+`[DefaultDllImportSearchPaths(DllImportSearchPath.System32)]`. Without it, a
+`dwmapi.dll` planted beside the app would be loaded into the elevated process on
+the next launch and its `DllMain` would run as administrator — the same escalation
+as the bare-name launch above, through the loader rather than through
+`CreateProcess`. `user32.dll` is a `KnownDLL` and is always resolved from
+`System32` regardless.
+
 ### What the app does not do
 
 - **No network I/O.** There is no HTTP client, socket, or listener anywhere in
@@ -318,6 +327,7 @@ refresh.
 - New "Simple view" toggle: collapses each adapter row to its connection name and toggle, and hides the header and the status bar. The window shrinks to fit the list rather than keeping its full height, so there is no dead space below the last adapter
 - New dark theme, following the Windows app theme by default with a toolbar toggle to override it. WPF's stock chrome is painted for a light theme and cannot be recoloured through properties alone, so tabs, buttons, checkboxes and scrollbars are templated; the OS-drawn title bar is handled through `DwmSetWindowAttribute` and the Windows Forms tray menu is coloured directly. Contrast was checked against the surface each colour actually sits on rather than picked by eye
 - New "Hide disconnected" toggle, filtering the adapter list down to adapters that are actually connected. Disabled adapters are deliberately exempt: hiding them would make an adapter vanish the moment you switched it off, and switching it back on is what the app is for
+- Security: the `dwmapi.dll` import is pinned to `System32`. The loader searches the application's own directory first and `dwmapi` is not a protected `KnownDLL`, so a copy planted beside this unsigned, portable, `requireAdministrator` executable would have been loaded into the elevated process — the DLL-loader form of the `netsh` path hardened in v1.2.1
 - Fixed disconnected adapters being reported as disabled. `NetEnabled` was read as "is this adapter switched on", but it follows the connection rather than the device, so an adapter that was enabled with nothing on the other end — a Bluetooth PAN with no device paired, an unplugged cable, Wi-Fi out of range — was labelled "Disabled" and drawn with its toggle off, offering to enable something that was already enabled. The disabled state now comes from `ConfigManagerErrorCode`, and the status dot covers every connection state instead of the three it had cases for
 - The adapter list now updates itself. Status was read once at load, so coming off Wi-Fi changed nothing on screen until Refresh was pressed — which also made "hide disconnected" look broken, since it was filtering a snapshot taken before the link dropped. The app now reacts to the network-change notifications Windows already raises, with a 10-second check behind them as a backstop, running only while the list is on screen
 - Fixed "hide disconnected" leaving a stale row on screen: an `ICollectionView` filter is not re-evaluated when an item's own properties change, so the view is now refreshed after a status update. The number of rows the filter removed is shown on the checkbox, which stays visible in simple view where the status bar does not

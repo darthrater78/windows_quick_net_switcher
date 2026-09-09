@@ -103,6 +103,19 @@ timer does not run while the list is off screen.
   now reads correctly, and whether the refresh actually fires on a Wi-Fi drop, can
   only be seen by running the build
 
+## Dropped, on the user's call: Wi-Fi SSID and encryption
+A WlanService reading the associated network's SSID and cipher through the Native
+Wifi API (wlanapi.dll P/Invoke, no process launch, no netsh text parsing) was
+written and then dropped at the user's request. Not because of a defect -- if it is
+ever revisited, the notes worth keeping are: WlanQueryInterface's reported data size
+must be checked before PtrToStructure reads the managed struct width out of a buffer
+Windows owns; an SSID is attacker-controlled display text and needs control and
+Unicode-format characters stripped; and WlanGetProfile must not be called, since it
+hands a saved passphrase in plaintext to an elevated caller.
+
+The DLL search-path hardening that came out of that work was kept, and shipped on
+its own.
+
 ## Decisions the next session must respect
 - Start-with-Windows stays removed. A RunLevel=HighestAvailable logon task is a
   silent elevation path on an unsigned exe
