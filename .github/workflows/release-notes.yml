@@ -1,0 +1,40 @@
+name: Release notes
+
+# Rewrites an existing release's notes from the README's changelog, without
+# re-tagging and without touching the attached executable. For releases published
+# before the notes were generated this way, and for fixing a changelog entry after
+# the fact -- re-running the original release run would replay the workflow file as
+# it stood at that tag, which is no help.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to refresh, e.g. v1.3.0'
+        required: true
+        type: string
+
+jobs:
+  notes:
+    # No build here, so the cheap runner rather than windows-latest.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The README as it stood at that release, and full history so the previous
+          # tag can be found for the compare link.
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Build notes from the changelog
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: bash .github/scripts/release-notes.sh "${{ inputs.tag }}" release-notes.md
+
+      - name: Update the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          body_path: release-notes.md
+          # No `files:` -- the published executable is left exactly as it was.

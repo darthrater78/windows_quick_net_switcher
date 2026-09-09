@@ -12,6 +12,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: the notes script looks up the previous tag for the
+          # compare link.
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -34,8 +38,14 @@ jobs:
         run: |
           Move-Item publish/QuickNetSwitcher.exe "publish/QuickNetSwitcher-v${{ steps.version.outputs.VERSION }}.exe"
 
+      - name: Release notes from the changelog
+        shell: bash
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: bash .github/scripts/release-notes.sh "v${{ steps.version.outputs.VERSION }}" release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: publish/QuickNetSwitcher-v${{ steps.version.outputs.VERSION }}.exe
-          generate_release_notes: true
+          body_path: release-notes.md
