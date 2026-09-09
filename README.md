@@ -9,9 +9,11 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 ## Features
 
 **Adapters tab**
-- View all physical network adapters with real-time status, speed, MAC address, IP/CIDR, gateway, DNS suffix, and interface metric
+- View all physical network adapters with status, speed, MAC address, IP/CIDR, gateway, DNS suffix, and interface metric
+- The list keeps itself current: Windows announces network changes and the app reacts to them, so dropping off Wi-Fi or unplugging a cable shows up on its own, with a 10-second check behind that as a backstop
 - Toggle adapters on/off with a single click
-- Drag-to-reorder the adapter list — order is remembered between launches
+- Drag-to-reorder the adapter list, with a translucent ghost of the whole row following the pointer — order is remembered between launches
+- Hide disconnected adapters, to cut the list down to the ones actually carrying a network
 - Edit an adapter's interface metric (1–9999) via a dialog
 
 **Route Table tab**
@@ -24,10 +26,11 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 **General**
 - System tray icon — minimize to tray and keep it running in the background
 - Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
-- Start with Windows — optional auto-launch via registry Run key
-- Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, start-with-Windows)
+- Simple view — strip the window down to connection names and their toggles, hiding the header and the status bar. The window shrinks to fit the list rather than keeping its full height. Any adapter that is not connected keeps its status word, so a disabled one still reads as disabled
+- Dark theme — follows the Windows app theme by default, with a toolbar toggle to override it. Both themes cover the window chrome, tabs, buttons, checkboxes, scrollbars, the route grid, the metric dialog, the title bar and the tray menu
+- Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, simple-view, and the theme once you pick one)
 - Custom app icon and Windows 11-inspired UI
-- Status bar links to the project on GitHub and to the running version's release notes
+- Links to the project on GitHub and to the running version's release notes, at the right-hand end of the tab strip
 - Runs as administrator (required to enable/disable adapters and change firewall/metric settings)
 - Single-file self-contained executable — no .NET runtime install needed
 
@@ -76,17 +79,37 @@ broker/UI design: the WPF interface, the WMI calls, and the `netsh` calls all
 run inside one elevated process. The practical consequence is that the trust
 decision is about the binary as a whole, not about one privileged component.
 
-Three things are deliberately kept *out* of that elevated scope:
+Two things are deliberately kept *out* of that elevated scope:
 
 - **Opening links.** Status-bar URLs are handed to `explorer.exe` rather than
   shell-executed. A direct `ShellExecute` from an elevated process would launch
   your default browser as administrator; delegating to the already-running
   user-level shell keeps the browser unelevated.
-- **The startup entry.** "Start with Windows" writes to `HKCU\...\Run` — the
-  per-user key — not the machine-wide `HKLM`. It affects only the current user
-  and can be removed without admin rights.
 - **Stored settings.** Both JSON files live under `%LOCALAPPDATA%`, per-user, not
   in a machine-wide or world-writable location.
+
+### Why there is no "start with Windows"
+
+Versions 1.1.0 through 1.2.1 offered a start-with-Windows checkbox that wrote a
+value under `HKCU\...\CurrentVersion\Run`. It never worked, and could not: the
+shell launches Run entries **unelevated**, this app is manifested
+`requireAdministrator`, and UAC has no interactive desktop to prompt on that
+early in logon — so Windows discarded the entry every time, silently. The value
+was created and the app never appeared.
+
+The option was removed in v1.3.0 rather than reimplemented, because the
+mechanism that *does* work — a scheduled task registered at
+`RunLevel=HighestAvailable` with a logon trigger — is a silent elevation path.
+Task Scheduler would start this process as administrator at every logon with no
+prompt, so anyone able to overwrite the executable would get administrator on
+the next logon. That is easy while the app lives in `Downloads` or any other
+folder a standard user can write to, which is the normal case for a portable
+single `.exe`, and there is no code signature to make the substitution visible.
+Trading a permanent unprompted elevation path for a convenience toggle is not a
+good deal, so the app does not auto-start at all. Launch it when you need it and
+leave it in the tray.
+
+On first run, v1.3.0 deletes the leftover `Run` value from earlier versions.
 
 ### Input handling at privileged boundaries
 
@@ -109,6 +132,15 @@ searches the calling application's own directory before `System32`: a bare
 administrator rights, since the process is elevated. Resolving from the Windows
 directory, which only administrators can write to, removes that path.
 
+The same search order applies to DLLs, so every `DllImport` of a library outside
+Windows' protected `KnownDLLs` list is pinned with
+`[DefaultDllImportSearchPaths(DllImportSearchPath.System32)]`. Without it, a
+`dwmapi.dll` planted beside the app would be loaded into the elevated process on
+the next launch and its `DllMain` would run as administrator — the same escalation
+as the bare-name launch above, through the loader rather than through
+`CreateProcess`. `user32.dll` is a `KnownDLL` and is always resolved from
+`System32` regardless.
+
 ### What the app does not do
 
 - **No network I/O.** There is no HTTP client, socket, or listener anywhere in
@@ -119,12 +151,15 @@ directory, which only administrators can write to, removes that path.
   that could be one.
 - **No machine-wide changes outside the three operations above.** No services,
   scheduled tasks, drivers, or `HKLM` writes.
+- **No auto-start.** The app registers no logon task and no `Run` entry; it runs
+  only when you launch it. See
+  [Why there is no "start with Windows"](#why-there-is-no-start-with-windows).
 
 ### Local state
 
 | File | Contents |
 |---|---|
-| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Three booleans: minimize-to-tray, pin-to-desktop, start-with-Windows |
+| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Four booleans (minimize-to-tray, pin-to-desktop, simple-view, hide-disconnected) and a nullable dark-mode flag, where null means "follow Windows" |
 | `%LOCALAPPDATA%\QuickNetSwitcher\adapter_order.json` | A list of adapter ID strings used for display order |
 
 Both are read with `System.Text.Json` into concrete types (`AppSettings` and
@@ -150,8 +185,8 @@ Stated plainly rather than left for you to discover:
   `SetParent` to place this elevated window underneath a window owned by the
   unelevated desktop shell. It is an unusual arrangement; turn the setting off
   if you would rather not have it.
-- **Some failures are silent.** Settings and startup-registry writes swallow
-  their exceptions, so a write that fails does so without surfacing an error.
+- **Some failures are silent.** Settings writes swallow their exceptions, so a
+  write that fails does so without surfacing an error.
 - **Exception text is shown in the UI.** Error messages from WMI and `netsh` are
   written to the status bar verbatim, which can expose internal detail. For a
   local single-user utility this is informative rather than sensitive.
@@ -194,12 +229,17 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 ## How It Works
 
 - **Adapters:** WMI (`Win32_NetworkAdapter`) discovers physical adapters and calls the `Enable()`/`Disable()` methods to toggle them. Adapter display order is persisted to a JSON file in `%LOCALAPPDATA%`. Interface metric is set via `netsh interface ipv4 set interface`.
+- **Disabled or just disconnected:** These are different states and WMI reports them with different properties. `ConfigManagerErrorCode == 22` (`CM_PROB_DISABLED`) is the device being switched off, which is what **Disable** in Network Connections does; `NetConnectionStatus` describes the connection on top of it. `NetEnabled` is deliberately not used for this, because it follows the connection rather than the device: an adapter that is enabled and merely idle — a Bluetooth PAN with nothing paired, an unplugged cable, Wi-Fi out of range — reports `NetEnabled = false`.
+- **Live status:** `NetworkChange.NetworkAddressChanged` and `NetworkAvailabilityChanged` are OS notifications rather than a poll, and they cover the case that matters — coming off a network. One disconnect raises several of them, on a thread pool thread, so they are marshalled to the UI thread and collapsed into a single refresh 750ms after the burst settles. A 10-second `DispatcherTimer` sits behind them as a backstop for changes those events do not raise (an adapter enabled or disabled from Network Connections, a speed or metric change); it runs only while the adapter list is actually on screen, so nothing ticks in the tray, minimised, or on another tab. A refresh updates the existing rows in place, matched on `DeviceID`, rather than rebuilding the list.
 - **Route Table:** WMI queries the system route table and resolves adapter indexes to friendly names for display.
 - **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`.
 - **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
-- **Start with Windows:** Manages an `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` registry entry pointing to the app executable.
-- **Settings:** All toolbar toggles are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
-- **Status bar links:** URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
+- **Simple view:** A flag on each `AdapterViewModel` collapses the description, address and DNS rows of the adapter template, leaving the name and its toggle. The status word survives for any adapter that is not connected: without it, a disabled adapter reads as a connected one whose toggle happens to be off. A connected row stays bare, since the green dot already says so. The header and the status bar are collapsed alongside them; the toolbar stays, since it occupies one row whether it carries one checkbox or four. The window also switches to `SizeToContent="Height"` so it fits the list instead of holding its full height; this applies only on the Adapters tab, since the route table would measure to every row it holds.
+- **Hide disconnected:** A filter on the adapter list's `ICollectionView`, so hidden adapters stay in the underlying collection and the saved display order keeps its full set. A filter is not re-evaluated when an item's own properties change, so the view is refreshed explicitly after a status update — otherwise an adapter that had just dropped its link would sit there until the list was rebuilt. Disabled adapters are never filtered out — switching one back on is what the app is for, and hiding it would put the row you just toggled off out of reach. The count of what the filter removed is shown on the checkbox itself, since the status bar carrying it is hidden in simple view.
+- **Reorder ghost:** Dragging a row's handle adds a `DragGhostAdorner` to the list's adorner layer, painting a translucent `VisualBrush` copy of the whole row that tracks the pointer. WPF supplies no drag visual of its own beyond the cursor.
+- **Theming:** Two `ResourceDictionary` palettes (`Themes/Light.xaml`, `Themes/Dark.xaml`) define the same key set, and `ThemeService` swaps one for the other in slot 0 of the application's merged dictionaries. Every colour is referenced with `DynamicResource`, so the swap propagates without rebuilding any window. The default comes from `AppsUseLightTheme` under `HKCU\...\Themes\Personalize`; clicking the toggle stores an explicit choice that stops following Windows. The title bar is darkened separately through `DwmSetWindowAttribute`, since the caption is drawn by the OS rather than WPF, and the tray menu is coloured by hand because Windows Forms sits outside WPF's resource system.
+- **Settings:** Minimize-to-tray, pin-to-desktop and the theme sit behind the toolbar's gear menu, since they are set once and left alone; hide-disconnected and simple view stay on the bar, because they change what you are looking at. All of them are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
+- **Links:** The GitHub and release-notes buttons sit at the right-hand end of the tab strip, placed there by the `TabControl` template via its `Tag`. URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
 - The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, metric, and firewall changes all require it.
 
 ## Architecture
@@ -211,6 +251,8 @@ A single WPF project with no external dependencies beyond `System.Management`
 QuickNetSwitcher.sln
 └── QuickNetSwitcher/
     ├── Properties/app.manifest     Elevation request (requireAdministrator)
+    ├── Themes/Light.xaml           Light palette
+    ├── Themes/Dark.xaml            Dark palette (same key set)
     ├── App.xaml / App.xaml.cs      Application entry point
     ├── MainWindow.xaml(.cs)        The single window: three tabs, tray icon, all event handling
     ├── MetricDialog.xaml(.cs)      Modal dialog for editing an interface metric
@@ -218,7 +260,9 @@ QuickNetSwitcher.sln
     ├── NetworkAdapterService.cs    WMI adapter discovery; enable/disable; metric via netsh
     ├── RouteTableService.cs        WMI route table query and interface-name resolution
     ├── FirewallService.cs          Firewall profile read/write via netsh advfirewall
-    ├── StartupService.cs           HKCU Run key entry
+    ├── LegacyStartupCleanup.cs     Removes the dead pre-1.3.0 Run key entry
+    ├── ThemeService.cs             Light/dark palette swap, title bar, OS theme lookup
+    ├── DragGhostAdorner.cs         Translucent row preview shown while reordering
     ├── DesktopPinService.cs        user32 interop for the desktop-layer pin
     ├── SettingsService.cs          settings.json load/save
     ├── AdapterOrderService.cs      adapter_order.json load/save, order application
@@ -241,8 +285,12 @@ The code splits into three layers with a deliberately simple shape:
 - **View models** (`AdapterViewModel`, `FirewallViewModel`) are plain display
   objects that map a service record to formatted strings (`IpDisplay`,
   `MetricDisplay`) and visibility flags (`HasIp`, `HasGateway`) for binding.
-  They are not full MVVM — there is no `INotifyPropertyChanged` and no
-  commanding; the list is rebuilt on refresh instead.
+  They are not full MVVM — there is no commanding. `AdapterViewModel` implements
+  `INotifyPropertyChanged`: `SimpleView` changes on items that are already bound,
+  and `UpdateFrom` re-reads a whole adapter record in place, raising one
+  empty-name change so every binding on the row re-reads. An automatic refresh
+  every few seconds is why the rows are updated rather than rebuilt — a rebuild
+  would drop the selection and re-apply the saved order over a drag in progress.
 - **`MainWindow`** holds the UI and all event handlers, and is the only place
   that coordinates between services and the view. At ~550 lines it is by far the
   largest file in the project.
@@ -252,9 +300,12 @@ The code splits into three layers with a deliberately simple shape:
 The three state-changing operations — adapter toggle, firewall toggle, and
 metric change — run on a background thread via `Task.Run` so a slow WMI or
 `netsh` call cannot freeze the UI, with the result marshalled back to update the
-status bar. The read paths (`LoadAdapters`, `LoadRoutes`, `LoadFirewall`) run
-synchronously on the UI thread, so a slow WMI query can briefly hitch the window
-on refresh.
+status bar. The automatic adapter refresh also reads off-thread, since it runs
+unattended and would otherwise hitch the window every few seconds; only the merge
+into the collection touches the UI thread. The read paths driven by an explicit
+user action (`LoadAdapters`, `LoadRoutes`, `LoadFirewall`) still run synchronously
+on the UI thread, so a slow WMI query can briefly hitch the window on a manual
+refresh.
 
 ### Notes on the current shape
 
@@ -268,6 +319,25 @@ on refresh.
   [Download Size](#download-size)).
 
 ## Version History
+
+### v1.3.0 — 2026-09-08
+- Removed "Start with Windows". It never worked — the shell launches `HKCU\...\Run` entries unelevated, and this app is manifested `requireAdministrator`, so Windows discarded the entry at every logon without an error. The registry value was written and the app never started
+- It was removed rather than fixed: the mechanism that works is a scheduled task at `RunLevel=HighestAvailable`, which would start this process as administrator at every logon with no UAC prompt. Anyone able to overwrite the unsigned executable — trivial while it sits in `Downloads` — would get administrator on the next logon. See [Why there is no "start with Windows"](#why-there-is-no-start-with-windows)
+- The leftover `Run` value from v1.1.0–v1.2.1 is deleted on first run of this version
+- New "Simple view" toggle: collapses each adapter row to its connection name and toggle, and hides the header and the status bar. The window shrinks to fit the list rather than keeping its full height, so there is no dead space below the last adapter
+- New dark theme, following the Windows app theme by default with a toolbar toggle to override it. WPF's stock chrome is painted for a light theme and cannot be recoloured through properties alone, so tabs, buttons, checkboxes and scrollbars are templated; the OS-drawn title bar is handled through `DwmSetWindowAttribute` and the Windows Forms tray menu is coloured directly. Contrast was checked against the surface each colour actually sits on rather than picked by eye
+- New "Hide disconnected" toggle, filtering the adapter list down to adapters that are actually connected. Disabled adapters are deliberately exempt: hiding them would make an adapter vanish the moment you switched it off, and switching it back on is what the app is for
+- Security: the `dwmapi.dll` import is pinned to `System32`. The loader searches the application's own directory first and `dwmapi` is not a protected `KnownDLL`, so a copy planted beside this unsigned, portable, `requireAdministrator` executable would have been loaded into the elevated process — the DLL-loader form of the `netsh` path hardened in v1.2.1
+- Fixed disconnected adapters being reported as disabled. `NetEnabled` was read as "is this adapter switched on", but it follows the connection rather than the device, so an adapter that was enabled with nothing on the other end — a Bluetooth PAN with no device paired, an unplugged cable, Wi-Fi out of range — was labelled "Disabled" and drawn with its toggle off, offering to enable something that was already enabled. The disabled state now comes from `ConfigManagerErrorCode`, and the status dot covers every connection state instead of the three it had cases for
+- The adapter list now updates itself. Status was read once at load, so coming off Wi-Fi changed nothing on screen until Refresh was pressed — which also made "hide disconnected" look broken, since it was filtering a snapshot taken before the link dropped. The app now reacts to the network-change notifications Windows already raises, with a 10-second check behind them as a backstop, running only while the list is on screen
+- Fixed "hide disconnected" leaving a stale row on screen: an `ICollectionView` filter is not re-evaluated when an item's own properties change, so the view is now refreshed after a status update. The number of rows the filter removed is shown on the checkbox, which stays visible in simple view where the status bar does not
+- Simple view now keeps the status word on any adapter that is not connected, so a disabled adapter no longer reads as a connected one whose toggle happens to be off
+- Reordering an adapter now drags a translucent ghost of the whole row rather than the stock drag cursor
+- Fixed reordering triggering when it should not have: whether a press landed on a drag handle was acted on but not remembered, so a later press anywhere in the list — the second click of a double-click, for instance — could reorder whichever row sat under the stale start point
+- The GitHub and release-notes links moved from the status bar to the right-hand end of the tab strip, so they stay reachable in simple view
+- Preferences moved into a gear menu on the toolbar — minimize-to-tray, pin-to-desktop and the theme — leaving hide-disconnected and simple view on the bar. Five checkboxes had grown wider than the window's 500px minimum and wrapped to a second row
+- All settings are remembered between sessions
+- Toolbar checkboxes now reflow instead of clipping when the window is narrow
 
 ### v1.2.1 — 2026-09-08
 - Security: `netsh` and `explorer.exe` are now launched by absolute path instead of by bare name. Windows searches the application's own directory before `System32`, so a `netsh.exe` planted beside the app would previously have been run with administrator rights — a privilege escalation path for anything already running as the user. Paths are resolved once in the new `SystemPaths` helper
@@ -310,4 +380,4 @@ https://github.com/darthrater78/windows_quick_net_switcher
 
 ## Release Notes
 
-https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.2.1
+https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.0

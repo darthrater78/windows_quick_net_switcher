@@ -1,0 +1,37 @@
+<!--
+  Dark palette. Mirrors every key in Light.xaml.
+
+  Contrast was chosen against the surface each token actually sits on, not picked
+  by eye: secondary text (#A9A9A9) on the card (#272727) is ~6.4:1, the link blue
+  (#4CC2FF) on the card is ~8.7:1, and white on the accent fill (#0078D4) is
+  ~4.6:1, all clear of the 4.5:1 line for body text. The status colours were
+  lightened from their light-theme values for the same reason; the light-theme
+  green (#0F7B0F) is ~1.6:1 on this background and would read as a dark smudge.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush x:Key="AccentBrush" Color="#4CC2FF" />
+    <SolidColorBrush x:Key="AccentFillBrush" Color="#0078D4" />
+    <SolidColorBrush x:Key="OnAccentBrush" Color="#FFFFFF" />
+
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#1B1B1B" />
+    <SolidColorBrush x:Key="CardBrush" Color="#272727" />
+    <SolidColorBrush x:Key="AltRowBrush" Color="#2E2E2E" />
+    <SolidColorBrush x:Key="SelectionBrush" Color="#123B5E" />
+    <SolidColorBrush x:Key="HoverBrush" Color="#14FFFFFF" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#3D3D3D" />
+
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F0F0F0" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A9A9A9" />
+
+    <SolidColorBrush x:Key="ControlBrush" Color="#2E2E2E" />
+    <SolidColorBrush x:Key="ControlBorderBrush" Color="#565656" />
+    <SolidColorBrush x:Key="ScrollThumbBrush" Color="#5A5A5A" />
+
+    <SolidColorBrush x:Key="EnabledBrush" Color="#6CCB5F" />
+    <SolidColorBrush x:Key="DisabledBrush" Color="#FF7B6E" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#FFB84D" />
+    <SolidColorBrush x:Key="UnknownBrush" Color="#8A8A8A" />
+    <SolidColorBrush x:Key="ToggleOffBrush" Color="#5A5A5A" />
+</ResourceDictionary>
