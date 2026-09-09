@@ -34,8 +34,53 @@ jobs:
         run: |
           Move-Item publish/QuickNetSwitcher.exe "publish/QuickNetSwitcher-v${{ steps.version.outputs.VERSION }}.exe"
 
+      # The release page used to show only what generate_release_notes could infer
+      # from merged pull requests -- one line, the merge commit's title -- while the
+      # README carried the actual changelog. This lifts that section out and uses it
+      # as the release body instead.
+      - name: Release notes from the changelog
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+
+          # Everything between this version's "### vX.Y.Z" heading and the next one.
+          # The trailing guard stops v1.3.0 from matching a v1.3.01 heading.
+          awk -v ver="$VERSION" '
+            $0 ~ "^### v" ver "([^0-9.]|$)" { found = 1; next }
+            found && /^### v/ { exit }
+            found { print }
+          ' README.md > notes-body.md
+
+          # No changelog entry means the release would go out describing nothing, so
+          # fail here rather than publish an empty one.
+          if ! grep -q '[^[:space:]]' notes-body.md; then
+            echo "::error::No '### v$VERSION' entry found in README.md Version History"
+            exit 1
+          fi
+
+          # Anchor-only links point at the README's own headings. On a release page a
+          # relative anchor resolves against the release URL instead, so they would be
+          # dead links; rewrite them to the README at this tag.
+          README_URL="${{ github.server_url }}/${{ github.repository }}/blob/v$VERSION/README.md"
+          sed -i "s@](\#@]($README_URL\#@g" notes-body.md
+
+          {
+            sed '/./,$!d' notes-body.md
+            echo
+            echo "## Download"
+            echo
+            echo "\`QuickNetSwitcher-v$VERSION.exe\` below -- a single self-contained"
+            echo "executable, no installer. It requires administrator rights, and it is"
+            echo "unsigned, so SmartScreen will warn on first run."
+          } > release-notes.md
+
+          cat release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: publish/QuickNetSwitcher-v${{ steps.version.outputs.VERSION }}.exe
+          body_path: release-notes.md
+          # Still on, and now additive: GitHub appends its "What's Changed" list and
+          # the Full Changelog compare link below the body above.
           generate_release_notes: true
