@@ -6,6 +6,8 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 ![Windows](https://img.shields.io/badge/platform-Windows%2011-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+[GitHub](https://github.com/darthrater78/windows_quick_net_switcher) · [v1.3.1 release notes](https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.1)
+
 ## Features
 
 **Adapters tab**
@@ -329,6 +331,16 @@ refresh.
 
 ## Version History
 
+### v1.3.1 — 2026-09-27
+- Fixed a crash when setting an interface metric: if `netsh` was still running after five seconds, reading its exit code threw an exception nothing caught, and the app closed. Every `netsh` call now goes through one runner that kills a `netsh` which has not finished in time and reports it as a failure
+- Fixed the firewall toggle reporting success when `netsh` never ran: success was judged by the absence of the word "Error" in the output, and no output contains no "Error". Firewall reads could also wait on `netsh` indefinitely; they now share the same timeout
+- `netsh` arguments are passed one by one instead of as a single string, so an adapter name reaches `netsh` as one argument whatever characters it contains
+- The adapter list, route table and firewall status load in the background instead of freezing the window while WMI and `netsh` answer
+- A failure to save settings or the adapter order is now shown in the status bar instead of being silently dropped
+- Security: the `user32.dll` imports are pinned to `System32` like `dwmapi.dll`. `user32` is a protected `KnownDLL`, so this closes nothing today; it means no import in the elevated process depends on the DLL search order
+- Release pages now include the screenshots, and each release executable carries a build provenance attestation you can check with `gh attestation verify` (see [Known limitations and hardening notes](#known-limitations-and-hardening-notes))
+- Release process hardening: a release is now refused unless the tag is on `main`, matches the version in the code, and the build passed for that commit. Every GitHub Action is pinned to a commit, workflow tokens are read-only except where a release is written, and Dependabot now watches the NuGet packages and the actions
+
 ### v1.3.0 — 2026-09-08
 - Removed "Start with Windows". It never worked — the shell launches `HKCU\...\Run` entries unelevated, and this app is manifested `requireAdministrator`, so Windows discarded the entry at every logon without an error. The registry value was written and the app never started
 - It was removed rather than fixed: the mechanism that works is a scheduled task at `RunLevel=HighestAvailable`, which would start this process as administrator at every logon with no UAC prompt. Anyone able to overwrite the unsigned executable — trivial while it sits in `Downloads` — would get administrator on the next logon. See [Why there is no "start with Windows"](#why-there-is-no-start-with-windows)
@@ -389,4 +401,4 @@ https://github.com/darthrater78/windows_quick_net_switcher
 
 ## Release Notes
 
-https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.0
+https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.1
