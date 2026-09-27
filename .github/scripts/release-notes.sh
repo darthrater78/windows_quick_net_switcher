@@ -35,14 +35,31 @@ fi
 # anchor resolves against the release URL instead, so they would be dead links.
 sed -i "s@](\#@]($REPO_URL/blob/$TAG/README.md\#@g" "$BODY"
 
+# The README's screenshots, so a release page shows what it is releasing. Optional:
+# a README without the section just produces notes without it.
+SHOTS="$(awk '
+  /^## Screenshots?[[:space:]]*$/ { found = 1; next }
+  found && /^## / { exit }
+  found && /[^[:space:]]/ { print }
+' README.md)"
+
 {
   sed '/./,$!d' "$BODY"
+  if [ -n "$SHOTS" ]; then
+    echo
+    echo "## Screenshots"
+    echo
+    printf '%s\n' "$SHOTS"
+  fi
   echo
   echo "## Download"
   echo
   echo "\`QuickNetSwitcher-$TAG.exe\` below -- a single self-contained executable, no"
   echo "installer. It requires administrator rights, and it is unsigned, so SmartScreen"
-  echo "will warn on first run."
+  echo "will warn on first run. To confirm it was built by this repository's release"
+  echo "workflow:"
+  echo
+  echo "\`gh attestation verify QuickNetSwitcher-$TAG.exe -R ${REPO_URL#https://github.com/}\`"
 
   # Only when the checkout carries enough history to find the previous tag.
   PREV="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"

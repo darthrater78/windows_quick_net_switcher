@@ -35,3 +35,8 @@ project.fragment.lock.json
 .DS_Store
 Thumbs.db
 desktop.ini
+
+## Dev Skills session state (local only)
+.dev-skills-gates.md
+.dev-skills-handoff.md
+.claude/dev-skills-gates.md

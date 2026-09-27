@@ -5,20 +5,118 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  # Never cancel a release in flight.
+  cancel-in-progress: false
+
 jobs:
+  # Being on main only proves a commit was merged, not that it built. This job
+  # checks both before anything is built or published, and holds no write
+  # permission itself. Linux, since it touches nothing Windows-specific.
+  gate:
+    runs-on: ubuntu-latest
+    # The CI wait loop below gives up after 30 minutes; this is the backstop.
+    timeout-minutes: 35
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag is on the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"; then
+            echo "::error::Tag $GITHUB_REF_NAME is not on $DEFAULT_BRANCH. Releases come from the default branch only."
+            exit 1
+          fi
+
+      # A tag pushed before its release PR merges lands on the previous version's
+      # commit, which passes the check above. Both version declarations must match.
+      - name: Verify tag matches the version in the tagged commit
+        run: |
+          set -euo pipefail
+          csproj="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' QuickNetSwitcher/QuickNetSwitcher.csproj | head -1)"
+          manifest="$(sed -n 's:.*<assemblyIdentity version="\([0-9.]*\)\.0".*:\1:p' QuickNetSwitcher/Properties/app.manifest | head -1)"
+          if [ -z "$csproj" ] || [ -z "$manifest" ]; then
+            echo "::error::Could not read the version from the csproj or app.manifest. Refusing to publish."
+            exit 1
+          fi
+          if [ "v$csproj" != "$GITHUB_REF_NAME" ] || [ "v$manifest" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME is on a commit that declares csproj $csproj, manifest $manifest. Merge the release first, then tag the merged commit."
+            exit 1
+          fi
+
+      - name: Require a passing Build run for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 1800 ))
+          while true; do
+            runs=$(gh api \
+              "repos/${REPO}/actions/workflows/build.yml/runs?head_sha=${SHA}&per_page=100" \
+              --jq '.workflow_runs[] | "\(.status) \(.conclusion) \(.html_url)"')
+
+            if [ -z "$runs" ]; then
+              echo "::error::Build has never run for ${SHA}, so nothing has tested this commit."
+              echo "Dispatch it by hand (Actions -> Build -> Run workflow), then re-tag." >&2
+              exit 1
+            fi
+
+            if printf '%s\n' "$runs" | awk '$2 == "success" { hit = 1 } END { exit !hit }'; then
+              echo "Build passed for ${SHA}."
+              exit 0
+            fi
+
+            unfinished=$(printf '%s\n' "$runs" | awk '$1 != "completed"' | wc -l)
+            if [ "$unfinished" -eq 0 ]; then
+              echo "::error::Build ran for ${SHA} and did not pass. Refusing to release."
+              printf '%s\n' "$runs" | sed 's/^/  /' >&2
+              exit 1
+            fi
+
+            echo "Build is still running for ${SHA} (${unfinished} unfinished) -- waiting."
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::Timed out waiting for Build on ${SHA} to finish."
+              exit 1
+            fi
+            sleep 20
+          done
+
   release:
+    needs: gate
     runs-on: windows-latest
+    timeout-minutes: 20
     permissions:
       contents: write
+      # Build provenance: a signed record that the exe came from this workflow run.
+      id-token: write
+      attestations: write
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history: the notes script looks up the previous tag for the
           # compare link.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '8.0.x'
 
@@ -28,24 +126,39 @@ jobs:
       - name: Publish single-file exe
         run: dotnet publish QuickNetSwitcher/QuickNetSwitcher.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 
-      - name: Get version from tag
-        id: version
-        shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
+      # The tag name only ever reaches a script through $GITHUB_REF_NAME, never a
+      # ${{ }} expression spliced into the script text.
       - name: Rename artifact
-        shell: pwsh
-        run: |
-          Move-Item publish/QuickNetSwitcher.exe "publish/QuickNetSwitcher-v${{ steps.version.outputs.VERSION }}.exe"
+        run: mv publish/QuickNetSwitcher.exe "publish/QuickNetSwitcher-${GITHUB_REF_NAME}.exe"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: publish/QuickNetSwitcher-${{ github.ref_name }}.exe
 
       - name: Release notes from the changelog
-        shell: bash
         env:
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
-        run: bash .github/scripts/release-notes.sh "v${{ steps.version.outputs.VERSION }}" release-notes.md
+        run: bash .github/scripts/release-notes.sh "$GITHUB_REF_NAME" release-notes.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: publish/QuickNetSwitcher-v${{ steps.version.outputs.VERSION }}.exe
-          body_path: release-notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            "publish/QuickNetSwitcher-${GITHUB_REF_NAME}.exe" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md
+
+      - name: Verify release has the exe attached
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name')"
+          echo "Assets: $assets"
+          if ! printf '%s\n' "$assets" | grep -qxF "QuickNetSwitcher-${GITHUB_REF_NAME}.exe"; then
+            echo "::error::Release published without its exe attached."
+            exit 1
+          fi

@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # Keeps the workflow SHA pins and their version comments current.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Grouped for review convenience, not as a risk judgement. Majors stay
+      # ungrouped: each is a breaking change with its own review.
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"

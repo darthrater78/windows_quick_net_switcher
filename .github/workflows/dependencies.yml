@@ -1,0 +1,61 @@
+name: Dependencies
+
+# Two checks on the NuGet packages, with different jobs:
+# - review: on a pull request, fails if it adds a package with a known advisory.
+# - audit: weekly, reports advisories published since the packages were added.
+#   Report-only -- it fails the scheduled run so it shows up, but blocks nothing.
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependencies-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dependency review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+
+  audit:
+    if: github.event_name != 'pull_request'
+    # Restore only, so Linux is enough; EnableWindowsTargeting lets it restore a
+    # net8.0-windows project off Windows. Set for the whole job, not as -p: on
+    # restore, because `dotnet list package` restores again without it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      EnableWindowsTargeting: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: List vulnerable packages, direct and transitive
+        run: |
+          set -euo pipefail
+          dotnet list package --vulnerable --include-transitive | tee audit.txt
+          if grep -q 'has the following vulnerable packages' audit.txt; then
+            echo "::error::Vulnerable packages found -- see the list above."
+            exit 1
+          fi

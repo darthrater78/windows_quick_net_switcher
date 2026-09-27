@@ -6,6 +6,8 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 ![Windows](https://img.shields.io/badge/platform-Windows%2011-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+[GitHub](https://github.com/darthrater78/windows_quick_net_switcher) · [v1.3.1 release notes](https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.1)
+
 ## Features
 
 **Adapters tab**
@@ -126,9 +128,12 @@ Every value that reaches a privileged call is constrained before it gets there:
 | `netsh interface ipv4 set interface` | The metric dialog — the only free-text input in the app | Validated twice, in the dialog and again in the service: integer, 1–9999. The interface alias comes from WMI, not from typed input |
 | `netsh advfirewall set` | Firewall profile name | Limited to the three literals the parser produces (`Domain`, `Private`, `Public`); never free text |
 
-All three `Process.Start` calls set `UseShellExecute = false`, so arguments are
+Every `Process.Start` call sets `UseShellExecute = false`, so arguments are
 passed directly to the target process — no shell is involved and no shell
-metacharacters are interpreted.
+metacharacters are interpreted. The `netsh` calls all go through one runner
+(`NetshRunner.cs`) that passes each argument separately rather than as a single
+string, and kills a `netsh` that has not finished within 5 seconds, reporting it
+as a failure rather than waiting on it.
 
 The executables themselves are launched by **absolute path**, resolved once in
 `SystemPaths.cs`, rather than by bare name. This matters because `CreateProcess`
@@ -137,14 +142,13 @@ searches the calling application's own directory before `System32`: a bare
 administrator rights, since the process is elevated. Resolving from the Windows
 directory, which only administrators can write to, removes that path.
 
-The same search order applies to DLLs, so every `DllImport` of a library outside
-Windows' protected `KnownDLLs` list is pinned with
+The same search order applies to DLLs, so every `DllImport` is pinned with
 `[DefaultDllImportSearchPaths(DllImportSearchPath.System32)]`. Without it, a
 `dwmapi.dll` planted beside the app would be loaded into the elevated process on
 the next launch and its `DllMain` would run as administrator — the same escalation
 as the bare-name launch above, through the loader rather than through
 `CreateProcess`. `user32.dll` is a `KnownDLL` and is always resolved from
-`System32` regardless.
+`System32` regardless; its imports are pinned too, so no import depends on that.
 
 ### What the app does not do
 
@@ -180,7 +184,11 @@ Stated plainly rather than left for you to discover:
 - **Releases are not code-signed.** The published `.exe` carries no Authenticode
   signature, so SmartScreen will warn on first run. Download only from the
   [official releases page](https://github.com/darthrater78/windows_quick_net_switcher/releases),
-  and treat a copy from anywhere else as untrusted.
+  and treat a copy from anywhere else as untrusted. Releases after v1.3.0 also
+  carry a build provenance attestation, a signed record that the file was built
+  by this repository's release workflow from a specific commit. With the
+  [GitHub CLI](https://cli.github.com/) you can check a download with
+  `gh attestation verify QuickNetSwitcher-vX.Y.Z.exe -R darthrater78/windows_quick_net_switcher`.
 - **Firewall status parsing is English-only.** Profile detection matches the
   literal strings `Domain Profile` / `Private Profile` / `Public Profile` and
   `State` in `netsh` output, and a failed toggle is detected by looking for the
@@ -190,8 +198,6 @@ Stated plainly rather than left for you to discover:
   `SetParent` to place this elevated window underneath a window owned by the
   unelevated desktop shell. It is an unusual arrangement; turn the setting off
   if you would rather not have it.
-- **Some failures are silent.** Settings writes swallow their exceptions, so a
-  write that fails does so without surfacing an error.
 - **Exception text is shown in the UI.** Error messages from WMI and `netsh` are
   written to the status bar verbatim, which can expose internal detail. For a
   local single-user utility this is informative rather than sensitive.
@@ -325,6 +331,16 @@ refresh.
 
 ## Version History
 
+### v1.3.1 — 2026-09-27
+- Fixed a crash when setting an interface metric: if `netsh` was still running after five seconds, reading its exit code threw an exception nothing caught, and the app closed. Every `netsh` call now goes through one runner that kills a `netsh` which has not finished in time and reports it as a failure
+- Fixed the firewall toggle reporting success when `netsh` never ran: success was judged by the absence of the word "Error" in the output, and no output contains no "Error". Firewall reads could also wait on `netsh` indefinitely; they now share the same timeout
+- `netsh` arguments are passed one by one instead of as a single string, so an adapter name reaches `netsh` as one argument whatever characters it contains
+- The adapter list, route table and firewall status load in the background instead of freezing the window while WMI and `netsh` answer
+- A failure to save settings or the adapter order is now shown in the status bar instead of being silently dropped
+- Security: the `user32.dll` imports are pinned to `System32` like `dwmapi.dll`. `user32` is a protected `KnownDLL`, so this closes nothing today; it means no import in the elevated process depends on the DLL search order
+- Release pages now include the screenshots, and each release executable carries a build provenance attestation you can check with `gh attestation verify` (see [Known limitations and hardening notes](#known-limitations-and-hardening-notes))
+- Release process hardening: a release is now refused unless the tag is on `main`, matches the version in the code, and the build passed for that commit. Every GitHub Action is pinned to a commit, workflow tokens are read-only except where a release is written, and Dependabot now watches the NuGet packages and the actions
+
 ### v1.3.0 — 2026-09-08
 - Removed "Start with Windows". It never worked — the shell launches `HKCU\...\Run` entries unelevated, and this app is manifested `requireAdministrator`, so Windows discarded the entry at every logon without an error. The registry value was written and the app never started
 - It was removed rather than fixed: the mechanism that works is a scheduled task at `RunLevel=HighestAvailable`, which would start this process as administrator at every logon with no UAC prompt. Anyone able to overwrite the unsigned executable — trivial while it sits in `Downloads` — would get administrator on the next logon. See [Why there is no "start with Windows"](#why-there-is-no-start-with-windows)
@@ -385,4 +401,4 @@ https://github.com/darthrater78/windows_quick_net_switcher
 
 ## Release Notes
 
-https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.0
+https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.1
