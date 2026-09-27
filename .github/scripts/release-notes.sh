@@ -35,8 +35,22 @@ fi
 # anchor resolves against the release URL instead, so they would be dead links.
 sed -i "s@](\#@]($REPO_URL/blob/$TAG/README.md\#@g" "$BODY"
 
+# The README's screenshots, so a release page shows what it is releasing. Optional:
+# a README without the section just produces notes without it.
+SHOTS="$(awk '
+  /^## Screenshots?[[:space:]]*$/ { found = 1; next }
+  found && /^## / { exit }
+  found && /[^[:space:]]/ { print }
+' README.md)"
+
 {
   sed '/./,$!d' "$BODY"
+  if [ -n "$SHOTS" ]; then
+    echo
+    echo "## Screenshots"
+    echo
+    printf '%s\n' "$SHOTS"
+  fi
   echo
   echo "## Download"
   echo
