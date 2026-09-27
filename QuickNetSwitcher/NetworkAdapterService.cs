@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Management;
 using System.Net.NetworkInformation;
@@ -183,20 +182,9 @@ public static class NetworkAdapterService
         if (metric < 1 || metric > 9999 || string.IsNullOrEmpty(interfaceAlias))
             return false;
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = SystemPaths.Netsh,
-            Arguments = $"interface ipv4 set interface \"{interfaceAlias}\" metric={metric}",
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-
-        using var proc = Process.Start(psi);
-        if (proc == null) return false;
-        proc.WaitForExit(5000);
-        return proc.ExitCode == 0;
+        var result = NetshRunner.Run(
+            "interface", "ipv4", "set", "interface", interfaceAlias, $"metric={metric}");
+        return result?.ExitCode == 0;
     }
 
     private static int MaskToCidr(string mask)

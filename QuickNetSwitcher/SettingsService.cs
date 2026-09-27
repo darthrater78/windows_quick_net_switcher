@@ -32,13 +32,15 @@ public static class SettingsService
             var json = File.ReadAllText(SettingsFile);
             return JsonSerializer.Deserialize<AppSettings>(json) ?? new();
         }
-        catch
+        // A missing, unreadable or corrupt file starts from defaults rather than
+        // stopping the app.
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             return new();
         }
     }
 
-    public static void Save(AppSettings settings)
+    public static bool Save(AppSettings settings)
     {
         try
         {
@@ -47,8 +49,10 @@ public static class SettingsService
             var options = new JsonSerializerOptions { WriteIndented = true };
             File.WriteAllText(SettingsFile, JsonSerializer.Serialize(settings, options));
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            return false;
         }
+        return true;
     }
 }

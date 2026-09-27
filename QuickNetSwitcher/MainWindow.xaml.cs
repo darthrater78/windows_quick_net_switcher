@@ -74,7 +74,7 @@ public partial class MainWindow : Window
         AdapterList.ItemsSource = _adapters;
         _adapterView = CollectionViewSource.GetDefaultView(_adapters);
         _adapterView.Filter = IsAdapterVisible;
-        LoadAdapters();
+        _ = LoadAdaptersAsync();
         StartAdapterWatch();
 
         // "Start with Windows" was removed in v1.3.0; drop the value it left behind.
@@ -121,7 +121,8 @@ public partial class MainWindow : Window
         _settings.PinToDesktop = PinToDesktopMenuItem.IsChecked == true;
         _settings.SimpleView = SimpleViewCheckBox.IsChecked == true;
         _settings.HideDisconnected = HideDisconnectedCheckBox.IsChecked == true;
-        SettingsService.Save(_settings);
+        if (!SettingsService.Save(_settings))
+            StatusText.Text = "Couldn't save settings";
     }
 
     private void ApplyPinToDesktop(bool pin)
@@ -361,18 +362,21 @@ public partial class MainWindow : Window
     {
         switch (MainTabs.SelectedIndex)
         {
-            case 1: LoadRoutes(); break;
-            case 2: LoadFirewall(); break;
-            default: LoadAdapters(); break;
+            case 1: _ = LoadRoutesAsync(); break;
+            case 2: _ = LoadFirewallAsync(); break;
+            default: _ = LoadAdaptersAsync(); break;
         }
     }
 
-    private void LoadAdapters()
+    // WMI and netsh take long enough to be felt, so each loader reads off the UI thread
+    // and only the update of what is on screen happens back on it.
+    private async Task LoadAdaptersAsync()
     {
         try
         {
             StatusText.Text = "Loading adapters...";
-            var adapters = NetworkAdapterService.GetAdapters()
+            var infos = await Task.Run(NetworkAdapterService.GetAdapters);
+            var adapters = infos
                 .Select(AdapterViewModel.FromInfo)
                 .ToList();
 
@@ -552,15 +556,16 @@ public partial class MainWindow : Window
 
     private void SaveAdapterOrder()
     {
-        AdapterOrderService.Save(_adapters.Select(a => a.AdapterId));
+        if (!AdapterOrderService.Save(_adapters.Select(a => a.AdapterId)))
+            StatusText.Text = "Couldn't save the adapter order";
     }
 
-    private void LoadRoutes()
+    private async Task LoadRoutesAsync()
     {
         try
         {
             StatusText.Text = "Loading route table...";
-            _allRoutes = RouteTableService.GetRoutes();
+            _allRoutes = await Task.Run(RouteTableService.GetRoutes);
             ApplyRouteFilter();
             StatusText.Text = $"{_allRoutes.Count} routes loaded";
         }
@@ -587,12 +592,13 @@ public partial class MainWindow : Window
         StatusText.Text = $"Showing {visible.Count} of {_allRoutes.Count} routes";
     }
 
-    private void LoadFirewall()
+    private async Task LoadFirewallAsync()
     {
         try
         {
             StatusText.Text = "Loading firewall status...";
-            var profiles = FirewallService.GetProfiles()
+            var infos = await Task.Run(FirewallService.GetProfiles);
+            var profiles = infos
                 .Select(FirewallViewModel.FromProfile)
                 .ToList();
             FirewallList.ItemsSource = profiles;
@@ -627,7 +633,7 @@ public partial class MainWindow : Window
             {
                 StatusText.Text = $"{profileKey} firewall {(enable ? "enabled" : "disabled")}";
                 await Task.Delay(300);
-                LoadFirewall();
+                await LoadFirewallAsync();
             }
             else
             {
@@ -668,7 +674,7 @@ public partial class MainWindow : Window
             {
                 StatusText.Text = $"{name} {(enable ? "enabled" : "disabled")}";
                 await Task.Delay(500);
-                LoadAdapters();
+                await LoadAdaptersAsync();
             }
             else
             {
@@ -703,18 +709,26 @@ public partial class MainWindow : Window
             var newMetric = dialog.MetricValue;
             StatusText.Text = $"Setting {adapter.Name} metric to {newMetric}...";
 
-            var success = await Task.Run(() =>
-                NetworkAdapterService.SetInterfaceMetric(adapter.Name, newMetric));
+            // async void: anything thrown here and not caught would end the process.
+            try
+            {
+                var success = await Task.Run(() =>
+                    NetworkAdapterService.SetInterfaceMetric(adapter.Name, newMetric));
 
-            if (success)
-            {
-                StatusText.Text = $"{adapter.Name} metric set to {newMetric}";
-                await Task.Delay(300);
-                LoadAdapters();
+                if (success)
+                {
+                    StatusText.Text = $"{adapter.Name} metric set to {newMetric}";
+                    await Task.Delay(300);
+                    await LoadAdaptersAsync();
+                }
+                else
+                {
+                    StatusText.Text = $"Failed to set metric for {adapter.Name}";
+                }
             }
-            else
+            catch (Exception ex)
             {
-                StatusText.Text = $"Failed to set metric for {adapter.Name}";
+                StatusText.Text = $"Error: {ex.Message}";
             }
         }
     }
@@ -755,9 +769,9 @@ public partial class MainWindow : Window
         UpdateAutoRefreshState();
 
         if (MainTabs.SelectedIndex == 1 && _allRoutes.Count == 0)
-            LoadRoutes();
+            _ = LoadRoutesAsync();
         else if (MainTabs.SelectedIndex == 2 && !_firewallLoaded)
-            LoadFirewall();
+            _ = LoadFirewallAsync();
     }
 
     private void RouteFilter_Changed(object sender, RoutedEventArgs e)

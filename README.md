@@ -126,9 +126,12 @@ Every value that reaches a privileged call is constrained before it gets there:
 | `netsh interface ipv4 set interface` | The metric dialog — the only free-text input in the app | Validated twice, in the dialog and again in the service: integer, 1–9999. The interface alias comes from WMI, not from typed input |
 | `netsh advfirewall set` | Firewall profile name | Limited to the three literals the parser produces (`Domain`, `Private`, `Public`); never free text |
 
-All three `Process.Start` calls set `UseShellExecute = false`, so arguments are
+Every `Process.Start` call sets `UseShellExecute = false`, so arguments are
 passed directly to the target process — no shell is involved and no shell
-metacharacters are interpreted.
+metacharacters are interpreted. The `netsh` calls all go through one runner
+(`NetshRunner.cs`) that passes each argument separately rather than as a single
+string, and kills a `netsh` that has not finished within 5 seconds, reporting it
+as a failure rather than waiting on it.
 
 The executables themselves are launched by **absolute path**, resolved once in
 `SystemPaths.cs`, rather than by bare name. This matters because `CreateProcess`
@@ -137,14 +140,13 @@ searches the calling application's own directory before `System32`: a bare
 administrator rights, since the process is elevated. Resolving from the Windows
 directory, which only administrators can write to, removes that path.
 
-The same search order applies to DLLs, so every `DllImport` of a library outside
-Windows' protected `KnownDLLs` list is pinned with
+The same search order applies to DLLs, so every `DllImport` is pinned with
 `[DefaultDllImportSearchPaths(DllImportSearchPath.System32)]`. Without it, a
 `dwmapi.dll` planted beside the app would be loaded into the elevated process on
 the next launch and its `DllMain` would run as administrator — the same escalation
 as the bare-name launch above, through the loader rather than through
 `CreateProcess`. `user32.dll` is a `KnownDLL` and is always resolved from
-`System32` regardless.
+`System32` regardless; its imports are pinned too, so no import depends on that.
 
 ### What the app does not do
 
@@ -194,8 +196,6 @@ Stated plainly rather than left for you to discover:
   `SetParent` to place this elevated window underneath a window owned by the
   unelevated desktop shell. It is an unusual arrangement; turn the setting off
   if you would rather not have it.
-- **Some failures are silent.** Settings writes swallow their exceptions, so a
-  write that fails does so without surfacing an error.
 - **Exception text is shown in the UI.** Error messages from WMI and `netsh` are
   written to the status bar verbatim, which can expose internal detail. For a
   local single-user utility this is informative rather than sensitive.

@@ -20,13 +20,15 @@ public static class AdapterOrderService
             var json = File.ReadAllText(OrderFile);
             return JsonSerializer.Deserialize<List<string>>(json) ?? new();
         }
-        catch
+        // A missing, unreadable or corrupt file starts from defaults rather than
+        // stopping the app.
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             return new();
         }
     }
 
-    public static void Save(IEnumerable<string> adapterIds)
+    public static bool Save(IEnumerable<string> adapterIds)
     {
         try
         {
@@ -34,9 +36,11 @@ public static class AdapterOrderService
             Directory.CreateDirectory(dir);
             File.WriteAllText(OrderFile, JsonSerializer.Serialize(adapterIds.ToList()));
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            return false;
         }
+        return true;
     }
 
     public static List<T> ApplyOrder<T>(List<T> adapters, Func<T, string> getId)
