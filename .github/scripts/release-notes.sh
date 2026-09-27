@@ -42,7 +42,10 @@ sed -i "s@](\#@]($REPO_URL/blob/$TAG/README.md\#@g" "$BODY"
   echo
   echo "\`QuickNetSwitcher-$TAG.exe\` below -- a single self-contained executable, no"
   echo "installer. It requires administrator rights, and it is unsigned, so SmartScreen"
-  echo "will warn on first run."
+  echo "will warn on first run. To confirm it was built by this repository's release"
+  echo "workflow:"
+  echo
+  echo "\`gh attestation verify QuickNetSwitcher-$TAG.exe -R ${REPO_URL#https://github.com/}\`"
 
   # Only when the checkout carries enough history to find the previous tag.
   PREV="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"

@@ -180,7 +180,11 @@ Stated plainly rather than left for you to discover:
 - **Releases are not code-signed.** The published `.exe` carries no Authenticode
   signature, so SmartScreen will warn on first run. Download only from the
   [official releases page](https://github.com/darthrater78/windows_quick_net_switcher/releases),
-  and treat a copy from anywhere else as untrusted.
+  and treat a copy from anywhere else as untrusted. Releases after v1.3.0 also
+  carry a build provenance attestation, a signed record that the file was built
+  by this repository's release workflow from a specific commit. With the
+  [GitHub CLI](https://cli.github.com/) you can check a download with
+  `gh attestation verify QuickNetSwitcher-vX.Y.Z.exe -R darthrater78/windows_quick_net_switcher`.
 - **Firewall status parsing is English-only.** Profile detection matches the
   literal strings `Domain Profile` / `Private Profile` / `Public Profile` and
   `State` in `netsh` output, and a failed toggle is detected by looking for the
