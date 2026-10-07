@@ -1,9 +1,9 @@
 # Quick Net Switcher
 
-A lightweight Windows 11 utility to quickly toggle network adapters on and off from the system tray.
+A small Windows utility for switching network adapters and firewall profiles on and off, kept in the system tray.
 
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-blue)
-![Windows](https://img.shields.io/badge/platform-Windows%2011-blue)
+![Windows](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 [GitHub](https://github.com/darthrater78/windows_quick_net_switcher) · [v1.3.1 release notes](https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.1)
@@ -28,7 +28,7 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 **General**
 - System tray icon — minimize to tray and keep it running in the background
 - Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
-- One line per adapter by default — name, status in words, address and its switch — with details opened per row. The window shrinks to fit the list rather than keeping its full height; "Show all details" restores the full-height view with every row open
+- The window shrinks to fit the adapter list rather than keeping its full height; "Show all details" restores the full-height view
 - Dark theme — follows the Windows app theme by default, with a toggle in the settings menu to override it. Both themes cover the window chrome, tabs, buttons, checkboxes, scrollbars, the route grid, the metric dialog, the title bar and the tray menu
 - Accent colour — teal by default; the settings menu also offers your Windows accent colour, green, or none. It colours switches that are on, the selected tab, ticked boxes, links and the tray icon
 - Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, hide-disconnected, show-all-details, the accent, and the theme once you pick one)
@@ -89,7 +89,7 @@ decision is about the binary as a whole, not about one privileged component.
 
 Two things are deliberately kept *out* of that elevated scope:
 
-- **Opening links.** Status-bar URLs are handed to `explorer.exe` rather than
+- **Opening links.** The footer's URLs are handed to `explorer.exe` rather than
   shell-executed. A direct `ShellExecute` from an elevated process would launch
   your default browser as administrator; delegating to the already-running
   user-level shell keeps the browser unelevated.
@@ -156,7 +156,7 @@ as the bare-name launch above, through the loader rather than through
 - **No network I/O.** There is no HTTP client, socket, or listener anywhere in
   the codebase. No telemetry, no analytics, no crash reporting, no update check.
   The only outbound action is handing a `github.com` URL to `explorer.exe` when
-  you click a status-bar link.
+  you click one of the two links in the footer.
 - **No credentials or secrets.** Nothing is authenticated and nothing is stored
   that could be one.
 - **No machine-wide changes outside the three operations above.** No services,
@@ -169,14 +169,16 @@ as the bare-name launch above, through the loader rather than through
 
 | File | Contents |
 |---|---|
-| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Four booleans (minimize-to-tray, pin-to-desktop, simple-view, hide-disconnected) and a nullable dark-mode flag, where null means "follow Windows" |
+| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Four booleans (minimize-to-tray, pin-to-desktop, simple-view, hide-disconnected), a nullable dark-mode flag, where null means "follow Windows", and the accent's name |
 | `%LOCALAPPDATA%\QuickNetSwitcher\adapter_order.json` | A list of adapter ID strings used for display order |
 
 Both are read with `System.Text.Json` into concrete types (`AppSettings` and
 `List<string>`), with no polymorphic or type-name handling — a tampered file
 cannot cause arbitrary types to be constructed. The values are also never
 forwarded to a privileged call: adapter IDs from the order file are used solely
-as sort keys for the list. Unreadable or corrupt files fall back to defaults.
+as sort keys for the list, and an accent name that is not one of the four the
+app knows is replaced by the default before it is used. Unreadable or corrupt
+files fall back to defaults.
 
 ### Known limitations and hardening notes
 
@@ -200,12 +202,12 @@ Stated plainly rather than left for you to discover:
   unelevated desktop shell. It is an unusual arrangement; turn the setting off
   if you would rather not have it.
 - **Exception text is shown in the UI.** Error messages from WMI and `netsh` are
-  written to the status bar verbatim, which can expose internal detail. For a
+  written to the status line verbatim, which can expose internal detail. For a
   local single-user utility this is informative rather than sensitive.
 
 ## Download Size
 
-The release exe is ~60–150 MB because it is published as a **self-contained
+The release exe is about 160 MB because it is published as a **self-contained
 single-file** binary — the entire .NET 8 runtime is bundled so you don't need
 to install .NET on the target machine. No installer required: just download,
 right-click, and run as administrator.
@@ -258,15 +260,15 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 ## Architecture
 
 A single WPF project with no external dependencies beyond `System.Management`
-(the WMI client). Roughly 1,800 lines of C# and XAML in total.
+(the WMI client). Roughly 3,400 lines of C# and XAML in total.
 
 ```
 QuickNetSwitcher.sln
 └── QuickNetSwitcher/
     ├── Properties/app.manifest     Elevation request (requireAdministrator)
-    ├── Themes/Light.xaml           Light palette
+    ├── Themes/Light.xaml           Light palette and the named accent colours
     ├── Themes/Dark.xaml            Dark palette (same key set)
-    ├── App.xaml / App.xaml.cs      Application entry point
+    ├── App.xaml / App.xaml.cs      Application entry point; control styles and fonts
     ├── MainWindow.xaml(.cs)        The single window: three tabs, tray icon, all event handling
     ├── MetricDialog.xaml(.cs)      Modal dialog for editing an interface metric
     │
@@ -299,26 +301,23 @@ The code splits into three layers with a deliberately simple shape:
   objects that map a service record to formatted strings (`IpDisplay`,
   `MetricDisplay`) and visibility flags (`HasIp`, `HasGateway`) for binding.
   They are not full MVVM — there is no commanding. `AdapterViewModel` implements
-  `INotifyPropertyChanged`: `SimpleView` changes on items that are already bound,
+  `INotifyPropertyChanged`: `SimpleView` and `IsExpanded` change on items that are already bound,
   and `UpdateFrom` re-reads a whole adapter record in place, raising one
   empty-name change so every binding on the row re-reads. An automatic refresh
   every few seconds is why the rows are updated rather than rebuilt — a rebuild
   would drop the selection and re-apply the saved order over a drag in progress.
 - **`MainWindow`** holds the UI and all event handlers, and is the only place
-  that coordinates between services and the view. At ~550 lines it is by far the
+  that coordinates between services and the view. At ~1,100 lines it is by far the
   largest file in the project.
 
 ### Threading
 
-The three state-changing operations — adapter toggle, firewall toggle, and
-metric change — run on a background thread via `Task.Run` so a slow WMI or
-`netsh` call cannot freeze the UI, with the result marshalled back to update the
-status bar. The automatic adapter refresh also reads off-thread, since it runs
-unattended and would otherwise hitch the window every few seconds; only the merge
-into the collection touches the UI thread. The read paths driven by an explicit
-user action (`LoadAdapters`, `LoadRoutes`, `LoadFirewall`) still run synchronously
-on the UI thread, so a slow WMI query can briefly hitch the window on a manual
-refresh.
+Nothing that waits on WMI or `netsh` runs on the UI thread. The three
+state-changing operations — adapter toggle, firewall toggle, and metric change —
+and the three loads (adapters, route table, firewall status) all run through
+`Task.Run`, with only the result marshalled back to update the list and the
+status line. The automatic adapter refresh reads off-thread the same way; only
+the merge into the collection touches the UI thread.
 
 ### Notes on the current shape
 
@@ -332,6 +331,16 @@ refresh.
   [Download Size](#download-size)).
 
 ## Version History
+
+### Unreleased
+- Redesigned window, recorded in [`DESIGN.md`](DESIGN.md): one line per adapter with its status in words, address and a larger switch; click a row for its details, or tick "Show all details". The title block, toolbar card, drop shadows and striped route rows are gone, and the tabs are one segmented control
+- New accent setting: teal by default, or your Windows accent colour, green, or none. A Windows accent too pale to read is replaced rather than used
+- A status line, the GitHub and release-notes links, Refresh and Settings now sit in a footer that every view keeps. "Simple view" is replaced by "Show all details", and one-line rows are the default for new installs
+- Contrast: the off-state switch, checkbox, text box and button outlines, the links and the drag handle all fell short of the WCAG minimums and now meet them in both themes. Failed actions are shown in an error colour
+- An out-of-range metric is reported inside the metric dialog instead of a separate message box
+- Dragging an adapter shows a bar where the row will land
+- The tray icon and tray menu take their colours from the theme instead of fixed values
+- Build: a change that touches only documentation no longer runs the Windows build, and a new workflow captures the README's screenshots from a real build
 
 ### v1.3.1 — 2026-09-27
 - Fixed a crash when setting an interface metric: if `netsh` was still running after five seconds, reading its exit code threw an exception nothing caught, and the app closed. Every `netsh` call now goes through one runner that kills a `netsh` which has not finished in time and reports it as a failure
