@@ -332,7 +332,8 @@
                                 </Style>
                             </DataGrid.CellStyle>
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Destination" Binding="{Binding DisplayDestination}" Width="140" />
+                                <!-- Wide enough for the longest IPv4 prefix, 255.255.255.255/32. -->
+                                <DataGridTextColumn Header="Destination" Binding="{Binding DisplayDestination}" Width="156" />
                                 <DataGridTextColumn Header="Gateway" Binding="{Binding Gateway}" Width="130" />
                                 <DataGridTextColumn Header="Interface" Binding="{Binding InterfaceName}" Width="*" FontFamily="{StaticResource UiFont}" />
                                 <!-- Right-aligned so the digits line up. -->
