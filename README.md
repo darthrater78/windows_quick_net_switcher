@@ -37,19 +37,17 @@ A small Windows utility for switching network adapters and firewall profiles on 
 - Runs as administrator (required to enable/disable adapters and change firewall/metric settings)
 - Single-file self-contained executable — no .NET runtime install needed
 
-## Screenshot
+## Screenshots
 
-<img width="601" height="550" alt="image" src="https://github.com/user-attachments/assets/e12df5d7-1fe1-45b7-bfed-0e39e19a139d" />
-<img width="599" height="541" alt="image" src="https://github.com/user-attachments/assets/f0eb490b-c9fd-40b9-8b1a-88120ca6e449" />
-<img width="604" height="552" alt="image" src="https://github.com/user-attachments/assets/b7b2a526-f58a-43a4-8c66-679e0fd68d94" />
-<img width="601" height="316" alt="image" src="https://github.com/user-attachments/assets/e02b1ed4-1bd8-4016-825c-b5fc12a89b3d" />
-<img width="606" height="246" alt="image" src="https://github.com/user-attachments/assets/095ec39a-109f-439b-942b-6eb002915cf1" />
+Captured from a real build on a GitHub Windows runner by the repository's
+Screenshots workflow, so the adapters, addresses and routes shown are that
+runner's.
 
-
-
-
-
-
+<img src="docs/screenshots/adapters.png" width="606" alt="Adapters tab: two adapters, each on one line with its status, address and switch" />
+<img src="docs/screenshots/adapters-details.png" width="606" alt="Adapters tab with Show all details ticked: gateway, metric, speed, MAC address, DNS suffix and device name under each adapter" />
+<img src="docs/screenshots/route-table.png" width="606" alt="Route Table tab: destination, gateway, interface, metric and type, with filters by route type" />
+<img src="docs/screenshots/firewall.png" width="606" alt="Firewall tab: Domain, Private and Public profiles, each with a switch" />
+<img src="docs/screenshots/adapters-dark.png" width="606" alt="Adapters tab in the dark theme" />
 
 ## Download
 
