@@ -17,6 +17,7 @@ public sealed class DragGhostAdorner : Adorner
     private readonly Size _size;
     private readonly double _grabOffset;
     private double _top;
+    private double? _insertAt;
 
     /// <param name="row">The row being dragged; painted live through a VisualBrush.</param>
     /// <param name="grabOffset">Where inside the row the pointer took hold, so the ghost
@@ -30,9 +31,12 @@ public sealed class DragGhostAdorner : Adorner
         _ghost = new VisualBrush(row) { Opacity = 0.6 };
     }
 
-    public void UpdatePosition(Point position)
+    /// <param name="insertAt">Where the row would land if dropped now, as a Y offset in
+    /// the list, or null when the pointer is not over another row.</param>
+    public void UpdatePosition(Point position, double? insertAt = null)
     {
         _top = position.Y - _grabOffset;
+        _insertAt = insertAt;
         InvalidateVisual();
     }
 
@@ -41,5 +45,9 @@ public sealed class DragGhostAdorner : Adorner
         if (_size.Width <= 0 || _size.Height <= 0) return;
 
         drawingContext.DrawRectangle(_ghost, null, new Rect(new Point(0, _top), _size));
+
+        // A 2px bar on the edge the row will take up, so the drop is not a guess.
+        if (_insertAt is { } y && TryFindResource("AccentBrush") is Brush accent)
+            drawingContext.DrawRectangle(accent, null, new Rect(0, y - 1, _size.Width, 2));
     }
 }

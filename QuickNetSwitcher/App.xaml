@@ -13,34 +13,57 @@
                 <ResourceDictionary Source="Themes/Light.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- Toggle switch -->
+            <!-- Type roles (DESIGN.md, Typography). UiFont is set on each window and
+                 inherited; DataFont is for addresses and numbers, wherever digits
+                 are compared. Each falls back to the face Windows 10 ships. -->
+            <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI</FontFamily>
+            <FontFamily x:Key="DataFont">Cascadia Mono, Consolas</FontFamily>
+            <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+            <!-- Keyboard focus. WPF's stock focus rectangle is a black dotted line,
+                 which disappears on the dark theme. -->
+            <Style x:Key="FocusRing">
+                <Setter Property="Control.Template">
+                    <Setter.Value>
+                        <ControlTemplate>
+                            <Rectangle Margin="-3"
+                                       RadiusX="8" RadiusY="8"
+                                       Stroke="{DynamicResource AccentBrush}"
+                                       StrokeThickness="2" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Toggle switch: the control the app exists for, so it is the largest
+                 one on screen. Off is an outline, on is filled. -->
             <Style x:Key="ToggleSwitchStyle" TargetType="CheckBox">
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+                <Setter Property="Cursor" Value="Hand" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="CheckBox">
-                            <Grid>
-                                <Border x:Name="track"
-                                        Width="44" Height="22"
-                                        CornerRadius="11"
-                                        Background="{DynamicResource ToggleOffBrush}"
-                                        Cursor="Hand">
-                                    <Ellipse x:Name="thumb"
-                                             Width="16" Height="16"
-                                             Fill="White"
-                                             HorizontalAlignment="Left"
-                                             Margin="3,0,0,0">
-                                        <Ellipse.Effect>
-                                            <DropShadowEffect ShadowDepth="1" BlurRadius="3" Opacity="0.3" />
-                                        </Ellipse.Effect>
-                                    </Ellipse>
-                                </Border>
-                            </Grid>
+                            <Border x:Name="track"
+                                    Width="52" Height="28"
+                                    CornerRadius="14"
+                                    Background="Transparent"
+                                    BorderBrush="{DynamicResource ControlBorderBrush}"
+                                    BorderThickness="1.5">
+                                <Ellipse x:Name="thumb"
+                                         Width="18" Height="18"
+                                         Fill="{DynamicResource TextSecondaryBrush}"
+                                         HorizontalAlignment="Left"
+                                         Margin="3,0,0,0" />
+                            </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsChecked" Value="True">
                                     <Setter TargetName="track" Property="Background" Value="{DynamicResource AccentFillBrush}" />
+                                    <Setter TargetName="track" Property="BorderBrush" Value="{DynamicResource AccentFillBrush}" />
+                                    <Setter TargetName="thumb" Property="Fill" Value="{DynamicResource OnAccentBrush}" />
                                     <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right" />
                                     <Setter TargetName="thumb" Property="Margin" Value="0,0,3,0" />
                                 </Trigger>
+                                <!-- Disabled while Windows carries out the change. -->
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter TargetName="track" Property="Opacity" Value="0.5" />
                                 </Trigger>
@@ -58,35 +81,81 @@
               light-theme control marooned on a dark window.
             -->
 
-            <!-- Buttons. Callers set Background/Foreground/BorderThickness; the
-                 template honours all three so link-style and filled buttons share it. -->
+            <!-- Buttons. The implicit style is the outlined button; PrimaryButton,
+                 LinkButton and IconButton below are the other three kinds. Hover and
+                 pressed lay WashBrush over the button instead of fading it, so the
+                 label keeps its contrast. -->
             <Style TargetType="Button">
                 <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="18,7" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="chrome"
-                                    CornerRadius="4"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
+                            <Grid>
+                                <Border CornerRadius="6"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}" />
+                                <Border x:Name="wash"
+                                        CornerRadius="6"
+                                        Background="{DynamicResource WashBrush}"
+                                        Opacity="0" />
+                                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center" />
+                            </Grid>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="chrome" Property="Opacity" Value="0.85" />
+                                    <Setter TargetName="wash" Property="Opacity" Value="0.08" />
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="chrome" Property="Opacity" Value="0.7" />
+                                    <Setter TargetName="wash" Property="Opacity" Value="0.16" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
-                                    <Setter TargetName="chrome" Property="Opacity" Value="0.5" />
+                                    <Setter Property="Opacity" Value="0.5" />
                                 </Trigger>
                             </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- The one filled action. Only the metric dialog's Apply uses it. -->
+            <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="Background" Value="{DynamicResource AccentFillBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource AccentFillBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+
+            <!-- Refresh and Settings. -->
+            <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Width" Value="28" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+                <Setter Property="FontSize" Value="14" />
+            </Style>
+
+            <!-- Text that acts: underlined so it does not rely on colour to be found. -->
+            <Style x:Key="LinkButton" TargetType="Button">
+                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                                <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                                           TextDecorations="Underline"
+                                           VerticalAlignment="Center" />
+                            </Border>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
@@ -95,10 +164,12 @@
             <!-- Checkboxes. ToggleSwitchStyle is explicit, so the adapter and
                  firewall switches are unaffected by this. -->
             <Style TargetType="CheckBox">
-                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-                <Setter Property="Background" Value="{DynamicResource ControlBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                <Setter Property="Background" Value="{DynamicResource CardBrush}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+                <Setter Property="FontSize" Value="12" />
                 <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="CheckBox">
@@ -130,7 +201,7 @@
                                     <Setter TargetName="tick" Property="Visibility" Value="Visible" />
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="box" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Opacity" Value="0.5" />
@@ -141,27 +212,35 @@
                 </Setter>
             </Style>
 
-            <!-- Tabs -->
+            <!-- Tabs, drawn as one segmented control across the window. Each TabItem
+                 carries its own corner radius in Tag and its own divider in
+                 BorderThickness, because a template cannot tell the first segment
+                 from the last. -->
             <Style TargetType="TabItem">
-                <Setter Property="Padding" Value="12,6" />
-                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Padding" Value="0,8" />
                 <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="TabItem">
-                            <Border x:Name="chrome"
-                                    Background="Transparent"
-                                    CornerRadius="8,8,0,0"
-                                    Margin="0,0,2,0"
-                                    Padding="{TemplateBinding Padding}">
-                                <ContentPresenter ContentSource="Header"
-                                                  HorizontalAlignment="Center"
-                                                  VerticalAlignment="Center" />
+                            <Border BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <Border x:Name="chrome"
+                                        Background="Transparent"
+                                        CornerRadius="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter ContentSource="Header"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center" />
+                                </Border>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsSelected" Value="True">
-                                    <Setter TargetName="chrome" Property="Background" Value="{DynamicResource CardBrush}" />
-                                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                                    <Setter TargetName="chrome" Property="Background" Value="{DynamicResource AccentFillBrush}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
                                     <Setter Property="FontWeight" Value="SemiBold" />
                                 </Trigger>
                                 <MultiTrigger>
@@ -178,9 +257,6 @@
                 </Setter>
             </Style>
 
-            <!-- The tab strip carries the window's links on the right of the same
-                 row, via the TabControl's Tag. They used to sit in the status bar,
-                 which simple view collapses, taking them with it. -->
             <Style x:Key="MainTabControlStyle" TargetType="TabControl">
                 <Setter Property="Template">
                     <Setter.Value>
@@ -191,20 +267,14 @@
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
 
-                                <DockPanel Grid.Row="0" LastChildFill="False">
-                                    <TabPanel DockPanel.Dock="Left" IsItemsHost="True" />
-                                    <ContentPresenter DockPanel.Dock="Right"
-                                                      Content="{TemplateBinding Tag}"
-                                                      VerticalAlignment="Center"
-                                                      Margin="0,0,8,4" />
-                                </DockPanel>
-
-                                <Border Grid.Row="1"
-                                        Background="{TemplateBinding Background}"
-                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                        BorderThickness="{TemplateBinding BorderThickness}">
-                                    <ContentPresenter ContentSource="SelectedContent" />
+                                <Border Grid.Row="0"
+                                        CornerRadius="6"
+                                        BorderBrush="{DynamicResource ControlBorderBrush}"
+                                        BorderThickness="1">
+                                    <UniformGrid Rows="1" IsItemsHost="True" />
                                 </Border>
+
+                                <ContentPresenter Grid.Row="1" ContentSource="SelectedContent" />
                             </Grid>
                         </ControlTemplate>
                     </Setter.Value>
@@ -217,8 +287,10 @@
             <Style TargetType="ContextMenu">
                 <Setter Property="Background" Value="{DynamicResource CardBrush}" />
                 <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+                <Setter Property="FontSize" Value="13" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ContextMenu">
@@ -227,9 +299,6 @@
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="6"
                                     Padding="4">
-                                <Border.Effect>
-                                    <DropShadowEffect ShadowDepth="2" BlurRadius="8" Opacity="0.25" />
-                                </Border.Effect>
                                 <StackPanel IsItemsHost="True"
                                             KeyboardNavigation.DirectionalNavigation="Cycle" />
                             </Border>
@@ -240,7 +309,6 @@
 
             <Style TargetType="MenuItem">
                 <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-                <Setter Property="FontSize" Value="12" />
                 <Setter Property="Cursor" Value="Hand" />
                 <Setter Property="Template">
                     <Setter.Value>
@@ -248,20 +316,20 @@
                             <Border x:Name="chrome"
                                     Background="Transparent"
                                     CornerRadius="4"
-                                    Padding="8,6">
+                                    Padding="10,7">
                                 <DockPanel>
                                     <Border x:Name="box"
                                             DockPanel.Dock="Left"
-                                            Width="14" Height="14" CornerRadius="3"
+                                            Width="16" Height="16" CornerRadius="3"
                                             Margin="0,0,8,0"
                                             VerticalAlignment="Center"
-                                            Background="{DynamicResource ControlBrush}"
+                                            Background="{DynamicResource CardBrush}"
                                             BorderBrush="{DynamicResource ControlBorderBrush}"
                                             BorderThickness="1">
                                         <Path x:Name="tick"
-                                              Data="M 0,3 L 2.5,5.5 L 6.8,1"
+                                              Data="M 0,3.4 L 2.9,6.3 L 7.7,1.1"
                                               Stroke="{DynamicResource OnAccentBrush}"
-                                              StrokeThickness="1.5"
+                                              StrokeThickness="1.6"
                                               StrokeEndLineCap="Round"
                                               StrokeStartLineCap="Round"
                                               Visibility="Collapsed"
@@ -285,22 +353,56 @@
                                 <Trigger Property="IsHighlighted" Value="True">
                                     <Setter TargetName="chrome" Property="Background" Value="{DynamicResource HoverBrush}" />
                                 </Trigger>
+                                <!-- A disabled item is a group label ("Accent"). -->
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    <Setter Property="FontSize" Value="12" />
+                                    <Setter Property="Cursor" Value="Arrow" />
+                                </Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
             </Style>
 
-            <!-- Text input. The stock template already honours these, so it keeps
-                 its own chrome; only the colours change. CaretBrush matters: the
-                 default caret is black and invisible on a dark field. -->
+            <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Separator">
+                            <Border Height="1" Margin="0,4"
+                                    Background="{DynamicResource BorderBrush}" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Text input. The stock template squares its corners and paints its own
+                 focus colour, so it is replaced. CaretBrush matters: the default caret
+                 is black and invisible on a dark field. -->
             <Style TargetType="TextBox">
-                <Setter Property="Background" Value="{DynamicResource ControlBrush}" />
+                <Setter Property="Background" Value="{DynamicResource CardBrush}" />
                 <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
                 <Setter Property="CaretBrush" Value="{DynamicResource TextPrimaryBrush}" />
                 <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillBrush}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="8,6" />
+                <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TextBox">
+                            <Border x:Name="chrome"
+                                    CornerRadius="6"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center" />
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
 
             <Style TargetType="DataGrid">
@@ -314,8 +416,8 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Thumb">
-                            <Border CornerRadius="4" Margin="2"
-                                    Background="{DynamicResource ScrollThumbBrush}" />
+                            <Border CornerRadius="3" Margin="2"
+                                    Background="{DynamicResource ControlBorderBrush}" />
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
