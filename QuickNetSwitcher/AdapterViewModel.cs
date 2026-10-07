@@ -26,7 +26,9 @@ public class AdapterViewModel : INotifyPropertyChanged
     public bool HasGateway => !string.IsNullOrEmpty(DefaultGateway);
     public bool HasDnsSuffix => !string.IsNullOrEmpty(DnsSuffix);
     public bool HasMetric => InterfaceMetric > 0;
-    public string MetricDisplay => InterfaceMetric > 0 ? $"metric {InterfaceMetric}" : "";
+    // Zero means Windows picks the metric itself; the label still has to say something,
+    // because it is also the link that opens the metric dialog.
+    public string MetricDisplay => InterfaceMetric > 0 ? $"metric {InterfaceMetric}" : "metric auto";
     public bool HasMac => !string.IsNullOrEmpty(MacAddress);
 
     // "Connected" is the one status that means the adapter is actually carrying a
@@ -49,8 +51,9 @@ public class AdapterViewModel : INotifyPropertyChanged
         : "Disconnected";
 
     private bool _simpleView;
+    private bool _isExpanded;
 
-    // Simple view strips the row back to the connection name and its toggle. The flag
+    // Simple view keeps each row to its name, status, address and switch. The flag
     // lives on the item rather than the window so the template binds to its own
     // DataContext -- no RelativeSource walk out to the Window, and no extra converters.
     public bool SimpleView
@@ -61,28 +64,24 @@ public class AdapterViewModel : INotifyPropertyChanged
             if (_simpleView == value) return;
             _simpleView = value;
             Notify(nameof(SimpleView));
-            Notify(nameof(ShowDetails));
-            Notify(nameof(ShowStatusRow));
-            Notify(nameof(ShowSpeed));
-            Notify(nameof(ShowMac));
-            Notify(nameof(ShowIpRow));
-            Notify(nameof(ShowDnsRow));
+            Notify(nameof(DetailsOpen));
         }
     }
 
-    public bool ShowDetails => !SimpleView;
-    public bool ShowIpRow => !SimpleView && HasIp;
-    public bool ShowDnsRow => !SimpleView && HasDnsSuffix;
+    // One row opened by hand while the rest stay in simple view.
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (_isExpanded == value) return;
+            _isExpanded = value;
+            Notify(nameof(IsExpanded));
+            Notify(nameof(DetailsOpen));
+        }
+    }
 
-    // Simple view drops the detail rows, and the status word lived in the first of
-    // them. Without it a disabled adapter reads as a connected one whose toggle
-    // happens to be off -- the row says nothing about why it is not working. So the
-    // status line survives simple view for anything that is not connected, carrying
-    // just the status ("Disabled", "Media disconnected"); a connected row keeps the
-    // bare name-and-toggle look, since the green dot already says so.
-    public bool ShowStatusRow => !SimpleView || !IsConnected;
-    public bool ShowSpeed => ShowDetails && HasSpeed;
-    public bool ShowMac => ShowDetails && HasMac;
+    public bool DetailsOpen => !SimpleView || IsExpanded;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

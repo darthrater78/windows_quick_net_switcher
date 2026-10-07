@@ -43,6 +43,11 @@ SHOTS="$(awk '
   found && /[^[:space:]]/ { print }
 ' README.md)"
 
+# The README points at the images by repository path, which resolves on the README
+# page and nowhere else. A release page needs the full URL, pinned to this tag so
+# the notes keep showing the UI as it was released.
+SHOTS="$(printf '%s\n' "$SHOTS" | sed "s@src=\"docs/@src=\"$REPO_URL/raw/$TAG/docs/@g")"
+
 {
   sed '/./,$!d' "$BODY"
   if [ -n "$SHOTS" ]; then

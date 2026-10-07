@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -47,6 +48,10 @@ public partial class MainWindow : Window
     private bool _dragHandleArmed;
     private DragGhostAdorner? _dragGhost;
     private bool _firewallLoaded;
+
+    // Rows opened by hand. Kept here by adapter id because a full reload rebuilds the
+    // view models, and a row that snapped shut after every toggle would be useless.
+    private readonly HashSet<string> _expandedIds = new();
     private AppSettings _settings = new();
     private bool _isPinnedToDesktop;
     private double _detailViewHeight;
@@ -104,13 +109,14 @@ public partial class MainWindow : Window
 
         // No explicit choice yet means follow Windows.
         var dark = _settings.DarkMode ?? ThemeService.WindowsPrefersDark();
-        ThemeService.Apply(dark);
+        ThemeService.Apply(dark, _settings.Accent);
         DarkModeMenuItem.IsChecked = dark;
-        ApplyTrayMenuTheme();
+        UpdateAccentChecks();
+        ApplyTrayTheme();
 
         MinimizeToTrayMenuItem.IsChecked = _settings.MinimizeToTray;
         PinToDesktopMenuItem.IsChecked = _settings.PinToDesktop;
-        SimpleViewCheckBox.IsChecked = _settings.SimpleView;
+        ShowAllDetailsCheckBox.IsChecked = !_settings.SimpleView;
         HideDisconnectedCheckBox.IsChecked = _settings.HideDisconnected;
         ApplySimpleView(_settings.SimpleView);
     }
@@ -119,10 +125,22 @@ public partial class MainWindow : Window
     {
         _settings.MinimizeToTray = MinimizeToTrayMenuItem.IsChecked == true;
         _settings.PinToDesktop = PinToDesktopMenuItem.IsChecked == true;
-        _settings.SimpleView = SimpleViewCheckBox.IsChecked == true;
+        _settings.SimpleView = ShowAllDetailsCheckBox.IsChecked != true;
         _settings.HideDisconnected = HideDisconnectedCheckBox.IsChecked == true;
         if (!SettingsService.Save(_settings))
-            StatusText.Text = "Couldn't save settings";
+            ShowError("Couldn't save settings");
+    }
+
+    // The footer's one line of feedback. Errors take the error colour so a failed
+    // change does not read like a completed one.
+    private void ShowStatus(string message) => SetStatus(message, "TextSecondaryBrush");
+
+    private void ShowError(string message) => SetStatus(message, "ErrorBrush");
+
+    private void SetStatus(string message, string brushKey)
+    {
+        StatusText.Text = message;
+        StatusText.SetResourceReference(TextBlock.ForegroundProperty, brushKey);
     }
 
     private void ApplyPinToDesktop(bool pin)
@@ -147,38 +165,72 @@ public partial class MainWindow : Window
         var pin = PinToDesktopMenuItem.IsChecked == true;
         ApplyPinToDesktop(pin);
         SaveSettings();
-        StatusText.Text = pin ? "Pinned to desktop" : "Unpinned from desktop";
+        ShowStatus(pin ? "Pinned to desktop" : "Unpinned from desktop");
     }
 
     private void DarkMode_Click(object sender, RoutedEventArgs e)
     {
         var dark = DarkModeMenuItem.IsChecked == true;
-        ThemeService.Apply(dark);
-        ApplyTrayMenuTheme();
+        ThemeService.Apply(dark, _settings.Accent);
+        ApplyTrayTheme();
 
         // Clicking it is what makes the choice explicit; until now the setting was
         // null and tracked the Windows theme.
         _settings.DarkMode = dark;
         SaveSettings();
-        StatusText.Text = dark ? "Dark theme" : "Light theme";
+        ShowStatus(dark ? "Dark theme" : "Light theme");
     }
 
-    // The tray menu is Windows Forms, outside WPF's resource system entirely, so it
-    // keeps a bright popup unless it is coloured by hand. The stock renderer paints
-    // its own background over BackColor; the system renderer honours it.
-    private void ApplyTrayMenuTheme()
+    private void Accent_Click(object sender, RoutedEventArgs e)
     {
-        if (_trayIcon?.ContextMenuStrip is not { } menu) return;
+        if (sender is not MenuItem { Tag: string accent }) return;
+
+        ThemeService.Apply(ThemeService.IsDark, accent);
+        UpdateAccentChecks();
+        ApplyTrayTheme();
+
+        _settings.Accent = ThemeService.Accent;
+        SaveSettings();
+        ShowStatus("Accent changed");
+    }
+
+    // The four accent items behave as one choice: clicking the ticked one must not
+    // untick it, which IsCheckable alone would allow.
+    private void UpdateAccentChecks()
+    {
+        foreach (var item in new[] { AccentTealMenuItem, AccentWindowsMenuItem, AccentGreenMenuItem, AccentInkMenuItem })
+            item.IsChecked = item.Tag as string == ThemeService.Accent;
+    }
+
+    // A theme colour for the Windows Forms and GDI+ side of the app, which sits
+    // outside WPF's resource system and cannot bind to it.
+    private static System.Drawing.Color ThemeColor(string brushKey, System.Drawing.Color fallback) =>
+        Application.Current.TryFindResource(brushKey) is SolidColorBrush brush
+            ? System.Drawing.Color.FromArgb(brush.Color.A, brush.Color.R, brush.Color.G, brush.Color.B)
+            : fallback;
+
+    // The tray menu keeps a bright popup on a dark desktop unless it is coloured by
+    // hand. The stock renderer paints its own background over BackColor; the system
+    // renderer honours it. The light theme leaves the menu to Windows.
+    private void ApplyTrayTheme()
+    {
+        if (_trayIcon == null) return;
+
+        var previous = _trayIcon.Icon;
+        _trayIcon.Icon = CreateTrayIcon();
+        previous?.Dispose();
+
+        if (_trayIcon.ContextMenuStrip is not { } menu) return;
 
         var dark = ThemeService.IsDark;
         menu.RenderMode = dark
             ? WinForms.ToolStripRenderMode.System
             : WinForms.ToolStripRenderMode.ManagerRenderMode;
         menu.BackColor = dark
-            ? System.Drawing.Color.FromArgb(43, 43, 43)
+            ? ThemeColor("CardBrush", System.Drawing.SystemColors.Menu)
             : System.Drawing.SystemColors.Menu;
         menu.ForeColor = dark
-            ? System.Drawing.Color.FromArgb(240, 240, 240)
+            ? ThemeColor("TextPrimaryBrush", System.Drawing.SystemColors.MenuText)
             : System.Drawing.SystemColors.MenuText;
 
         foreach (WinForms.ToolStripItem item in menu.Items)
@@ -204,28 +256,59 @@ public partial class MainWindow : Window
         || adapter.IsConnected
         || !adapter.IsEnabled;
 
-    private void SimpleView_Click(object sender, RoutedEventArgs e)
+    private void ShowAllDetails_Click(object sender, RoutedEventArgs e)
     {
-        ApplySimpleView(SimpleViewCheckBox.IsChecked == true);
+        ApplySimpleView(ShowAllDetailsCheckBox.IsChecked != true);
         SaveSettings();
     }
 
-    // Simple view strips the window back to what it is for: a list of connection names
-    // and their toggles, with the header and status bar out of the way.
-    //
-    // The toolbar checkboxes stay. Hiding them was tried and reverted: the toolbar is
-    // one row whether it carries one checkbox or four, so collapsing them cost the
-    // settings their controls and bought back no height at all.
+    // Simple view is the default: one line per adapter, with a row's details opened
+    // by clicking it. "Show all details" turns it off and opens every row.
     private void ApplySimpleView(bool simple)
     {
-        var chrome = simple ? Visibility.Collapsed : Visibility.Visible;
-        HeaderPanel.Visibility = chrome;
-        StatusBar.Visibility = chrome;
-
         foreach (var adapter in _adapters)
             adapter.SimpleView = simple;
 
         UpdateWindowSizing();
+    }
+
+    // Opens or closes one row's details. The handle, the switch and the metric link
+    // sit inside the row and keep their own clicks.
+    private void AdapterRow_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: AdapterViewModel adapter } row) return;
+
+        for (var hit = e.OriginalSource as DependencyObject;
+             hit != null && hit != row;
+             hit = hit is Visual ? VisualTreeHelper.GetParent(hit) : LogicalTreeHelper.GetParent(hit))
+        {
+            if (hit is System.Windows.Controls.Primitives.ButtonBase
+                || hit is FrameworkElement { Tag: "DragHandle" })
+                return;
+        }
+
+        ToggleExpanded(adapter);
+    }
+
+    // The same for the keyboard: Enter or Space on a focused row. A press that lands
+    // on the switch inside the row belongs to the switch.
+    private void AdapterList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Space)) return;
+        if (e.OriginalSource is not ListBoxItem { DataContext: AdapterViewModel adapter }) return;
+
+        ToggleExpanded(adapter);
+        e.Handled = true;
+    }
+
+    private void ToggleExpanded(AdapterViewModel adapter)
+    {
+        adapter.IsExpanded = !adapter.IsExpanded;
+
+        if (adapter.IsExpanded)
+            _expandedIds.Add(adapter.AdapterId);
+        else
+            _expandedIds.Remove(adapter.AdapterId);
     }
 
     // Remembers the height the user picked, so leaving simple view restores it.
@@ -245,14 +328,14 @@ public partial class MainWindow : Window
 
     // The adapter list sits in a star-sized row, so the window holds its full height
     // whatever the content needs. Simple view rows are a third as tall, which left a
-    // dead band of empty card below the last adapter; sizing to content removes it.
+    // dead band of empty space below the last adapter; sizing to content removes it.
     //
     // Only the adapter list is measured this way. The route table would size to every
     // row it holds and snap the window to the full screen height, so the other tabs
     // keep the fixed height.
     private void UpdateWindowSizing()
     {
-        var fitToContent = SimpleViewCheckBox.IsChecked == true && MainTabs.SelectedIndex == 0;
+        var fitToContent = ShowAllDetailsCheckBox.IsChecked != true && MainTabs.SelectedIndex == 0;
 
         // Already in the right mode: leave the window exactly as the user left it.
         if (fitToContent == (SizeToContent == SizeToContent.Height)) return;
@@ -293,11 +376,12 @@ public partial class MainWindow : Window
 
     // Left-clicking the gear opens its own context menu. Declaring the menu on the
     // button keeps the two in one place; only the placement has to be set by hand,
-    // since WPF positions it at the pointer for a right-click.
+    // since WPF positions it at the pointer for a right-click. The gear sits in the
+    // footer, so the menu opens upward.
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
         SettingsMenu.PlacementTarget = SettingsButton;
-        SettingsMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        SettingsMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
         SettingsMenu.HorizontalOffset = 0;
         SettingsMenu.IsOpen = true;
     }
@@ -329,23 +413,45 @@ public partial class MainWindow : Window
         _trayIcon.ContextMenuStrip = contextMenu;
     }
 
+    // Pinned to System32 like the other imports: this process runs elevated.
+    [DllImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(IntPtr handle);
+
+    // Drawn in the current accent, so it is redrawn whenever the theme or accent
+    // changes (ApplyTrayTheme).
     private static System.Drawing.Icon CreateTrayIcon()
     {
-        var bmp = new Bitmap(32, 32);
-        using var g = Graphics.FromImage(bmp);
-        g.Clear(System.Drawing.Color.Transparent);
-        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        using var brush = new SolidBrush(System.Drawing.Color.FromArgb(0, 120, 212));
-        g.FillEllipse(brush, 2, 2, 28, 28);
-        using var pen = new System.Drawing.Pen(System.Drawing.Color.White, 2.5f);
-        g.DrawLine(pen, 10, 16, 22, 10);
-        g.DrawLine(pen, 22, 10, 18, 10);
-        g.DrawLine(pen, 22, 10, 22, 14);
-        g.DrawLine(pen, 22, 16, 10, 22);
-        g.DrawLine(pen, 10, 22, 14, 22);
-        g.DrawLine(pen, 10, 22, 10, 18);
+        using var bmp = new Bitmap(32, 32);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.Clear(System.Drawing.Color.Transparent);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var brush = new SolidBrush(
+                ThemeColor("AccentFillBrush", System.Drawing.SystemColors.Highlight));
+            g.FillEllipse(brush, 2, 2, 28, 28);
+            using var pen = new System.Drawing.Pen(
+                ThemeColor("OnAccentBrush", System.Drawing.SystemColors.HighlightText), 2.5f);
+            g.DrawLine(pen, 10, 16, 22, 10);
+            g.DrawLine(pen, 22, 10, 18, 10);
+            g.DrawLine(pen, 22, 10, 22, 14);
+            g.DrawLine(pen, 22, 16, 10, 22);
+            g.DrawLine(pen, 10, 22, 14, 22);
+            g.DrawLine(pen, 10, 22, 10, 18);
+        }
+
+        // FromHandle does not take ownership of the handle, so the icon is cloned
+        // into one that owns its own copy and the original is released here.
         var handle = bmp.GetHicon();
-        return System.Drawing.Icon.FromHandle(handle);
+        try
+        {
+            return (System.Drawing.Icon)System.Drawing.Icon.FromHandle(handle).Clone();
+        }
+        finally
+        {
+            DestroyIcon(handle);
+        }
     }
 
     private void ShowFromTray()
@@ -374,7 +480,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            StatusText.Text = "Loading adapters...";
+            ShowStatus("Loading adapters...");
             var infos = await Task.Run(NetworkAdapterService.GetAdapters);
             var adapters = infos
                 .Select(AdapterViewModel.FromInfo)
@@ -386,6 +492,7 @@ public partial class MainWindow : Window
             foreach (var a in ordered)
             {
                 a.SimpleView = _settings.SimpleView;
+                a.IsExpanded = _expandedIds.Contains(a.AdapterId);
                 _adapters.Add(a);
             }
 
@@ -393,7 +500,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Error: {ex.Message}";
+            ShowError($"Error: {ex.Message}");
         }
     }
 
@@ -483,7 +590,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Error: {ex.Message}";
+            ShowError($"Error: {ex.Message}");
         }
         finally
         {
@@ -544,11 +651,11 @@ public partial class MainWindow : Window
         var hidden = _adapters.Count(a => !IsAdapterVisible(a));
         var hiddenNote = hidden > 0 ? $"  ·  {hidden} hidden" : "";
 
-        StatusText.Text = $"{_adapters.Count} adapters found  ·  {enabled} enabled{hiddenNote}";
+        ShowStatus($"{_adapters.Count} adapters found  ·  {enabled} enabled{hiddenNote}");
 
-        // The status bar carrying that count is hidden in simple view, where the filter
-        // is most likely to be on. Without this, a row the filter removed and an adapter
-        // that genuinely vanished look identical.
+        // The count rides on the checkbox as well as the status line, which the next
+        // action overwrites. Without it, a row the filter removed and an adapter that
+        // genuinely vanished look identical.
         HideDisconnectedCheckBox.Content = hidden > 0
             ? $"Hide disconnected ({hidden})"
             : "Hide disconnected";
@@ -557,21 +664,21 @@ public partial class MainWindow : Window
     private void SaveAdapterOrder()
     {
         if (!AdapterOrderService.Save(_adapters.Select(a => a.AdapterId)))
-            StatusText.Text = "Couldn't save the adapter order";
+            ShowError("Couldn't save the adapter order");
     }
 
     private async Task LoadRoutesAsync()
     {
         try
         {
-            StatusText.Text = "Loading route table...";
+            ShowStatus("Loading route table...");
             _allRoutes = await Task.Run(RouteTableService.GetRoutes);
             ApplyRouteFilter();
-            StatusText.Text = $"{_allRoutes.Count} routes loaded";
+            ShowStatus($"{_allRoutes.Count} routes loaded");
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Error: {ex.Message}";
+            ShowError($"Error: {ex.Message}");
         }
     }
 
@@ -589,14 +696,14 @@ public partial class MainWindow : Window
         }).ToList();
 
         RouteGrid.ItemsSource = visible;
-        StatusText.Text = $"Showing {visible.Count} of {_allRoutes.Count} routes";
+        ShowStatus($"Showing {visible.Count} of {_allRoutes.Count} routes");
     }
 
     private async Task LoadFirewallAsync()
     {
         try
         {
-            StatusText.Text = "Loading firewall status...";
+            ShowStatus("Loading firewall status...");
             var infos = await Task.Run(FirewallService.GetProfiles);
             var profiles = infos
                 .Select(FirewallViewModel.FromProfile)
@@ -605,11 +712,11 @@ public partial class MainWindow : Window
             _firewallLoaded = true;
 
             var onCount = profiles.Count(p => p.IsEnabled);
-            StatusText.Text = $"{profiles.Count} firewall profiles  ·  {onCount} enabled";
+            ShowStatus($"{profiles.Count} firewall profiles  ·  {onCount} enabled");
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Error: {ex.Message}";
+            ShowError($"Error: {ex.Message}");
         }
     }
 
@@ -621,7 +728,7 @@ public partial class MainWindow : Window
         var enable = toggle.IsChecked == true;
         var action = enable ? "Enabling" : "Disabling";
 
-        StatusText.Text = $"{action} {profileKey} firewall...";
+        ShowStatus($"{action} {profileKey} firewall...");
         toggle.IsEnabled = false;
 
         try
@@ -631,19 +738,19 @@ public partial class MainWindow : Window
 
             if (success)
             {
-                StatusText.Text = $"{profileKey} firewall {(enable ? "enabled" : "disabled")}";
+                ShowStatus($"{profileKey} firewall {(enable ? "enabled" : "disabled")}");
                 await Task.Delay(300);
                 await LoadFirewallAsync();
             }
             else
             {
-                StatusText.Text = $"Failed to {action.ToLower()} {profileKey} firewall";
+                ShowError($"Failed to {action.ToLower()} {profileKey} firewall");
                 toggle.IsChecked = !enable;
             }
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Error: {ex.Message}";
+            ShowError($"Error: {ex.Message}");
             toggle.IsChecked = !enable;
         }
         finally
@@ -662,7 +769,7 @@ public partial class MainWindow : Window
         var adapter = _adapters.FirstOrDefault(a => a.AdapterId == adapterId);
         var name = adapter?.Name ?? adapterId;
 
-        StatusText.Text = $"{action} {name}...";
+        ShowStatus($"{action} {name}...");
         toggle.IsEnabled = false;
 
         try
@@ -672,19 +779,19 @@ public partial class MainWindow : Window
 
             if (success)
             {
-                StatusText.Text = $"{name} {(enable ? "enabled" : "disabled")}";
+                ShowStatus($"{name} {(enable ? "enabled" : "disabled")}");
                 await Task.Delay(500);
                 await LoadAdaptersAsync();
             }
             else
             {
-                StatusText.Text = $"Failed to {action.ToLower()} {name}";
+                ShowError($"Failed to {action.ToLower()} {name}");
                 toggle.IsChecked = !enable;
             }
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Error: {ex.Message}";
+            ShowError($"Error: {ex.Message}");
             toggle.IsChecked = !enable;
         }
         finally
@@ -707,7 +814,7 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() == true)
         {
             var newMetric = dialog.MetricValue;
-            StatusText.Text = $"Setting {adapter.Name} metric to {newMetric}...";
+            ShowStatus($"Setting {adapter.Name} metric to {newMetric}...");
 
             // async void: anything thrown here and not caught would end the process.
             try
@@ -717,18 +824,18 @@ public partial class MainWindow : Window
 
                 if (success)
                 {
-                    StatusText.Text = $"{adapter.Name} metric set to {newMetric}";
+                    ShowStatus($"{adapter.Name} metric set to {newMetric}");
                     await Task.Delay(300);
                     await LoadAdaptersAsync();
                 }
                 else
                 {
-                    StatusText.Text = $"Failed to set metric for {adapter.Name}";
+                    ShowError($"Failed to set metric for {adapter.Name}");
                 }
             }
             catch (Exception ex)
             {
-                StatusText.Text = $"Error: {ex.Message}";
+                ShowError($"Error: {ex.Message}");
             }
         }
     }
@@ -757,7 +864,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Couldn't open link: {ex.Message}";
+            ShowError($"Couldn't open link: {ex.Message}");
         }
     }
 
@@ -921,7 +1028,22 @@ public partial class MainWindow : Window
         }
         e.Effects = DragDropEffects.Move;
         e.Handled = true;
-        _dragGhost?.UpdatePosition(e.GetPosition(AdapterList));
+
+        // Mirrors AdapterList_Drop: the dragged row takes the target's place, so it
+        // lands below a target further down the list and above one further up.
+        var pos = e.GetPosition(AdapterList);
+        double? insertAt = null;
+        if (e.Data.GetData(typeof(AdapterViewModel)) is AdapterViewModel dragged
+            && GetListBoxItemAt(AdapterList, pos) is { DataContext: AdapterViewModel target } targetItem
+            && target != dragged)
+        {
+            var top = targetItem.TranslatePoint(new System.Windows.Point(0, 0), AdapterList).Y;
+            insertAt = _adapters.IndexOf(dragged) < _adapters.IndexOf(target)
+                ? top + targetItem.ActualHeight
+                : top;
+        }
+
+        _dragGhost?.UpdatePosition(pos, insertAt);
     }
 
     private void AdapterList_Drop(object sender, DragEventArgs e)
@@ -950,6 +1072,6 @@ public partial class MainWindow : Window
 
         _adapters.Move(oldIndex, newIndex);
         SaveAdapterOrder();
-        StatusText.Text = $"Adapter order updated";
+        ShowStatus($"Adapter order updated");
     }
 }

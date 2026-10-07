@@ -1,9 +1,9 @@
 # Quick Net Switcher
 
-A lightweight Windows 11 utility to quickly toggle network adapters on and off from the system tray.
+A small Windows utility for switching network adapters and firewall profiles on and off, kept in the system tray.
 
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-blue)
-![Windows](https://img.shields.io/badge/platform-Windows%2011-blue)
+![Windows](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 [GitHub](https://github.com/darthrater78/windows_quick_net_switcher) · [v1.3.1 release notes](https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.1)
@@ -11,12 +11,12 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 ## Features
 
 **Adapters tab**
-- View all physical network adapters with status, speed, MAC address, IP/CIDR, gateway, DNS suffix, and interface metric
+- View all physical network adapters with status and IP/CIDR on one line each. Click an adapter for its gateway, interface metric, speed, MAC address, DNS suffix and device name, or tick "Show all details" to open every row
 - The list keeps itself current: Windows announces network changes and the app reacts to them, so dropping off Wi-Fi or unplugging a cable shows up on its own, with a 10-second check behind that as a backstop
 - Toggle adapters on/off with a single click
-- Drag-to-reorder the adapter list, with a translucent ghost of the whole row following the pointer — order is remembered between launches
+- Drag-to-reorder the adapter list by its handle, with a translucent ghost of the whole row following the pointer and a bar marking where it will land — order is remembered between launches
 - Hide disconnected adapters, to cut the list down to the ones actually carrying a network
-- Edit an adapter's interface metric (1–9999) via a dialog
+- Edit an adapter's interface metric (1–9999) by clicking the metric in its details
 
 **Route Table tab**
 - View the system route table with friendly adapter names
@@ -28,27 +28,26 @@ A lightweight Windows 11 utility to quickly toggle network adapters on and off f
 **General**
 - System tray icon — minimize to tray and keep it running in the background
 - Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
-- Simple view — strip the window down to connection names and their toggles, hiding the header and the status bar. The window shrinks to fit the list rather than keeping its full height. Any adapter that is not connected keeps its status word, so a disabled one still reads as disabled
-- Dark theme — follows the Windows app theme by default, with a toolbar toggle to override it. Both themes cover the window chrome, tabs, buttons, checkboxes, scrollbars, the route grid, the metric dialog, the title bar and the tray menu
-- Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, simple-view, and the theme once you pick one)
-- Custom app icon and Windows 11-inspired UI
-- Links to the project on GitHub and to the running version's release notes, at the right-hand end of the tab strip
+- The window shrinks to fit the adapter list rather than keeping its full height; "Show all details" restores the full-height view
+- Dark theme — follows the Windows app theme by default, with a toggle in the settings menu to override it. Both themes cover the window chrome, tabs, buttons, checkboxes, scrollbars, the route grid, the metric dialog, the title bar and the tray menu
+- Accent colour — teal by default; the settings menu also offers your Windows accent colour, green, or none. It colours switches that are on, the selected tab, ticked boxes, links and the tray icon
+- Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, hide-disconnected, show-all-details, the accent, and the theme once you pick one)
+- Custom app icon, and a look recorded in [`DESIGN.md`](DESIGN.md)
+- Links to the project on GitHub and to the running version's release notes, in the footer of every view
 - Runs as administrator (required to enable/disable adapters and change firewall/metric settings)
 - Single-file self-contained executable — no .NET runtime install needed
 
-## Screenshot
+## Screenshots
 
-<img width="601" height="550" alt="image" src="https://github.com/user-attachments/assets/e12df5d7-1fe1-45b7-bfed-0e39e19a139d" />
-<img width="599" height="541" alt="image" src="https://github.com/user-attachments/assets/f0eb490b-c9fd-40b9-8b1a-88120ca6e449" />
-<img width="604" height="552" alt="image" src="https://github.com/user-attachments/assets/b7b2a526-f58a-43a4-8c66-679e0fd68d94" />
-<img width="601" height="316" alt="image" src="https://github.com/user-attachments/assets/e02b1ed4-1bd8-4016-825c-b5fc12a89b3d" />
-<img width="606" height="246" alt="image" src="https://github.com/user-attachments/assets/095ec39a-109f-439b-942b-6eb002915cf1" />
+Captured from a real build on a GitHub Windows runner by the repository's
+Screenshots workflow, so the adapters, addresses and routes shown are that
+runner's.
 
-
-
-
-
-
+<img src="docs/screenshots/adapters.png" width="606" alt="Adapters tab: two adapters, each on one line with its status, address and switch" />
+<img src="docs/screenshots/adapters-details.png" width="606" alt="Adapters tab with Show all details ticked: gateway, metric, speed, MAC address, DNS suffix and device name under each adapter" />
+<img src="docs/screenshots/route-table.png" width="606" alt="Route Table tab: destination, gateway, interface, metric and type, with filters by route type" />
+<img src="docs/screenshots/firewall.png" width="606" alt="Firewall tab: Domain, Private and Public profiles, each with a switch" />
+<img src="docs/screenshots/adapters-dark.png" width="606" alt="Adapters tab in the dark theme" />
 
 ## Download
 
@@ -88,7 +87,7 @@ decision is about the binary as a whole, not about one privileged component.
 
 Two things are deliberately kept *out* of that elevated scope:
 
-- **Opening links.** Status-bar URLs are handed to `explorer.exe` rather than
+- **Opening links.** The footer's URLs are handed to `explorer.exe` rather than
   shell-executed. A direct `ShellExecute` from an elevated process would launch
   your default browser as administrator; delegating to the already-running
   user-level shell keeps the browser unelevated.
@@ -155,7 +154,7 @@ as the bare-name launch above, through the loader rather than through
 - **No network I/O.** There is no HTTP client, socket, or listener anywhere in
   the codebase. No telemetry, no analytics, no crash reporting, no update check.
   The only outbound action is handing a `github.com` URL to `explorer.exe` when
-  you click a status-bar link.
+  you click one of the two links in the footer.
 - **No credentials or secrets.** Nothing is authenticated and nothing is stored
   that could be one.
 - **No machine-wide changes outside the three operations above.** No services,
@@ -168,14 +167,16 @@ as the bare-name launch above, through the loader rather than through
 
 | File | Contents |
 |---|---|
-| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Four booleans (minimize-to-tray, pin-to-desktop, simple-view, hide-disconnected) and a nullable dark-mode flag, where null means "follow Windows" |
+| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Four booleans (minimize-to-tray, pin-to-desktop, simple-view, hide-disconnected), a nullable dark-mode flag, where null means "follow Windows", and the accent's name |
 | `%LOCALAPPDATA%\QuickNetSwitcher\adapter_order.json` | A list of adapter ID strings used for display order |
 
 Both are read with `System.Text.Json` into concrete types (`AppSettings` and
 `List<string>`), with no polymorphic or type-name handling — a tampered file
 cannot cause arbitrary types to be constructed. The values are also never
 forwarded to a privileged call: adapter IDs from the order file are used solely
-as sort keys for the list. Unreadable or corrupt files fall back to defaults.
+as sort keys for the list, and an accent name that is not one of the four the
+app knows is replaced by the default before it is used. Unreadable or corrupt
+files fall back to defaults.
 
 ### Known limitations and hardening notes
 
@@ -199,12 +200,12 @@ Stated plainly rather than left for you to discover:
   unelevated desktop shell. It is an unusual arrangement; turn the setting off
   if you would rather not have it.
 - **Exception text is shown in the UI.** Error messages from WMI and `netsh` are
-  written to the status bar verbatim, which can expose internal detail. For a
+  written to the status line verbatim, which can expose internal detail. For a
   local single-user utility this is informative rather than sensitive.
 
 ## Download Size
 
-The release exe is ~60–150 MB because it is published as a **self-contained
+The release exe is about 160 MB because it is published as a **self-contained
 single-file** binary — the entire .NET 8 runtime is bundled so you don't need
 to install .NET on the target machine. No installer required: just download,
 right-click, and run as administrator.
@@ -245,26 +246,27 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 - **Route Table:** WMI queries the system route table and resolves adapter indexes to friendly names for display.
 - **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`.
 - **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
-- **Simple view:** A flag on each `AdapterViewModel` collapses the description, address and DNS rows of the adapter template, leaving the name and its toggle. The status word survives for any adapter that is not connected: without it, a disabled adapter reads as a connected one whose toggle happens to be off. A connected row stays bare, since the green dot already says so. The header and the status bar are collapsed alongside them; the toolbar stays, since it occupies one row whether it carries one checkbox or four. The window also switches to `SizeToContent="Height"` so it fits the list instead of holding its full height; this applies only on the Adapters tab, since the route table would measure to every row it holds.
-- **Hide disconnected:** A filter on the adapter list's `ICollectionView`, so hidden adapters stay in the underlying collection and the saved display order keeps its full set. A filter is not re-evaluated when an item's own properties change, so the view is refreshed explicitly after a status update — otherwise an adapter that had just dropped its link would sit there until the list was rebuilt. Disabled adapters are never filtered out — switching one back on is what the app is for, and hiding it would put the row you just toggled off out of reach. The count of what the filter removed is shown on the checkbox itself, since the status bar carrying it is hidden in simple view.
-- **Reorder ghost:** Dragging a row's handle adds a `DragGhostAdorner` to the list's adorner layer, painting a translucent `VisualBrush` copy of the whole row that tracks the pointer. WPF supplies no drag visual of its own beyond the cursor.
-- **Theming:** Two `ResourceDictionary` palettes (`Themes/Light.xaml`, `Themes/Dark.xaml`) define the same key set, and `ThemeService` swaps one for the other in slot 0 of the application's merged dictionaries. Every colour is referenced with `DynamicResource`, so the swap propagates without rebuilding any window. The default comes from `AppsUseLightTheme` under `HKCU\...\Themes\Personalize`; clicking the toggle stores an explicit choice that stops following Windows. The title bar is darkened separately through `DwmSetWindowAttribute`, since the caption is drawn by the OS rather than WPF, and the tray menu is coloured by hand because Windows Forms sits outside WPF's resource system.
-- **Settings:** Minimize-to-tray, pin-to-desktop and the theme sit behind the toolbar's gear menu, since they are set once and left alone; hide-disconnected and simple view stay on the bar, because they change what you are looking at. All of them are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
-- **Links:** The GitHub and release-notes buttons sit at the right-hand end of the tab strip, placed there by the `TabControl` template via its `Tag`. URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
+- **Simple view:** A flag on each `AdapterViewModel` hides the row's detail line, leaving the name, the status in words, the address and the switch. It is on by default; "Show all details" turns it off. Clicking a row sets a second flag, `IsExpanded`, that opens just that row; the window remembers which rows are open by adapter id, because a full reload rebuilds the view models. In simple view the window switches to `SizeToContent="Height"` so it fits the list instead of holding its full height; this applies only on the Adapters tab, since the route table would measure to every row it holds.
+- **Hide disconnected:** A filter on the adapter list's `ICollectionView`, so hidden adapters stay in the underlying collection and the saved display order keeps its full set. A filter is not re-evaluated when an item's own properties change, so the view is refreshed explicitly after a status update — otherwise an adapter that had just dropped its link would sit there until the list was rebuilt. Disabled adapters are never filtered out — switching one back on is what the app is for, and hiding it would put the row you just toggled off out of reach. The count of what the filter removed is shown on the checkbox itself, since the status line carrying it is overwritten by the next action.
+- **Reorder ghost:** Dragging a row's handle adds a `DragGhostAdorner` to the list's adorner layer, painting a translucent `VisualBrush` copy of the whole row that tracks the pointer, plus a 2px bar on the edge the row will take up. WPF supplies no drag visual of its own beyond the cursor.
+- **Theming:** Two `ResourceDictionary` palettes (`Themes/Light.xaml`, `Themes/Dark.xaml`) define the same key set, and `ThemeService` swaps one for the other in slot 0 of the application's merged dictionaries. Every colour is referenced with `DynamicResource`, so the swap propagates without rebuilding any window. The default comes from `AppsUseLightTheme` under `HKCU\...\Themes\Personalize`; clicking the toggle stores an explicit choice that stops following Windows. The title bar is darkened separately through `DwmSetWindowAttribute`, since the caption is drawn by the OS rather than WPF, and the tray menu and tray icon are coloured by hand from the same brushes because Windows Forms sits outside WPF's resource system.
+- **Accent:** Each palette defines the named accents as colours (`AccentTealColor` and so on); `ThemeService` writes the chosen one into three brushes in the application's own dictionary, which is searched before the merged palette, and rewrites them on every theme change. "Match Windows" reads `AccentColor` under `HKCU\SOFTWARE\Microsoft\Windows\DWM` when the theme or accent is applied. Because that colour is whatever the user set, it is checked against the WCAG ratios first: one below 3:1 against the row colour is replaced by the text colour, and one below 4.5:1 is not used for link text.
+- **Settings:** Minimize-to-tray, pin-to-desktop, the theme and the accent sit behind the gear in the footer, since they are set once and left alone; hide-disconnected and show-all-details stay under the tabs, because they change what you are looking at. All of them are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
+- **Links:** The GitHub and release-notes links sit in the footer beside the status line, which every view keeps. URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
 - The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, metric, and firewall changes all require it.
 
 ## Architecture
 
 A single WPF project with no external dependencies beyond `System.Management`
-(the WMI client). Roughly 1,800 lines of C# and XAML in total.
+(the WMI client). Roughly 3,400 lines of C# and XAML in total.
 
 ```
 QuickNetSwitcher.sln
 └── QuickNetSwitcher/
     ├── Properties/app.manifest     Elevation request (requireAdministrator)
-    ├── Themes/Light.xaml           Light palette
+    ├── Themes/Light.xaml           Light palette and the named accent colours
     ├── Themes/Dark.xaml            Dark palette (same key set)
-    ├── App.xaml / App.xaml.cs      Application entry point
+    ├── App.xaml / App.xaml.cs      Application entry point; control styles and fonts
     ├── MainWindow.xaml(.cs)        The single window: three tabs, tray icon, all event handling
     ├── MetricDialog.xaml(.cs)      Modal dialog for editing an interface metric
     │
@@ -272,7 +274,7 @@ QuickNetSwitcher.sln
     ├── RouteTableService.cs        WMI route table query and interface-name resolution
     ├── FirewallService.cs          Firewall profile read/write via netsh advfirewall
     ├── LegacyStartupCleanup.cs     Removes the dead pre-1.3.0 Run key entry
-    ├── ThemeService.cs             Light/dark palette swap, title bar, OS theme lookup
+    ├── ThemeService.cs             Light/dark palette swap, accent, title bar, OS theme lookup
     ├── DragGhostAdorner.cs         Translucent row preview shown while reordering
     ├── DesktopPinService.cs        user32 interop for the desktop-layer pin
     ├── SettingsService.cs          settings.json load/save
@@ -297,26 +299,23 @@ The code splits into three layers with a deliberately simple shape:
   objects that map a service record to formatted strings (`IpDisplay`,
   `MetricDisplay`) and visibility flags (`HasIp`, `HasGateway`) for binding.
   They are not full MVVM — there is no commanding. `AdapterViewModel` implements
-  `INotifyPropertyChanged`: `SimpleView` changes on items that are already bound,
+  `INotifyPropertyChanged`: `SimpleView` and `IsExpanded` change on items that are already bound,
   and `UpdateFrom` re-reads a whole adapter record in place, raising one
   empty-name change so every binding on the row re-reads. An automatic refresh
   every few seconds is why the rows are updated rather than rebuilt — a rebuild
   would drop the selection and re-apply the saved order over a drag in progress.
 - **`MainWindow`** holds the UI and all event handlers, and is the only place
-  that coordinates between services and the view. At ~550 lines it is by far the
+  that coordinates between services and the view. At ~1,100 lines it is by far the
   largest file in the project.
 
 ### Threading
 
-The three state-changing operations — adapter toggle, firewall toggle, and
-metric change — run on a background thread via `Task.Run` so a slow WMI or
-`netsh` call cannot freeze the UI, with the result marshalled back to update the
-status bar. The automatic adapter refresh also reads off-thread, since it runs
-unattended and would otherwise hitch the window every few seconds; only the merge
-into the collection touches the UI thread. The read paths driven by an explicit
-user action (`LoadAdapters`, `LoadRoutes`, `LoadFirewall`) still run synchronously
-on the UI thread, so a slow WMI query can briefly hitch the window on a manual
-refresh.
+Nothing that waits on WMI or `netsh` runs on the UI thread. The three
+state-changing operations — adapter toggle, firewall toggle, and metric change —
+and the three loads (adapters, route table, firewall status) all run through
+`Task.Run`, with only the result marshalled back to update the list and the
+status line. The automatic adapter refresh reads off-thread the same way; only
+the merge into the collection touches the UI thread.
 
 ### Notes on the current shape
 
@@ -330,6 +329,16 @@ refresh.
   [Download Size](#download-size)).
 
 ## Version History
+
+### Unreleased
+- Redesigned window, recorded in [`DESIGN.md`](DESIGN.md): one line per adapter with its status in words, address and a larger switch; click a row for its details, or tick "Show all details". The title block, toolbar card, drop shadows and striped route rows are gone, and the tabs are one segmented control
+- New accent setting: teal by default, or your Windows accent colour, green, or none. A Windows accent too pale to read is replaced rather than used
+- A status line, the GitHub and release-notes links, Refresh and Settings now sit in a footer that every view keeps. "Simple view" is replaced by "Show all details", and one-line rows are the default for new installs
+- Contrast: the off-state switch, checkbox, text box and button outlines, the links and the drag handle all fell short of the WCAG minimums and now meet them in both themes. Failed actions are shown in an error colour
+- An out-of-range metric is reported inside the metric dialog instead of a separate message box
+- Dragging an adapter shows a bar where the row will land
+- The tray icon and tray menu take their colours from the theme instead of fixed values
+- Build: a change that touches only documentation no longer runs the Windows build, and a new workflow captures the README's screenshots from a real build
 
 ### v1.3.1 — 2026-09-27
 - Fixed a crash when setting an interface metric: if `netsh` was still running after five seconds, reading its exit code threw an exception nothing caught, and the app closed. Every `netsh` call now goes through one runner that kills a `netsh` which has not finished in time and reports it as a failure
