@@ -114,7 +114,7 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <!-- Clicking the row opens its details; the handle, the
-                                     switch and the metric link keep their own clicks. -->
+                                     switch, the metric link and the DNS box keep their own clicks. -->
                                 <Grid x:Name="row"
                                       Background="Transparent"
                                       MinHeight="54"
@@ -225,6 +225,14 @@
                                                         Tag="{Binding}"
                                                         Click="EditMetric_Click"
                                                         Visibility="{Binding HasIp, Converter={StaticResource BoolToVis}}" />
+                                                <CheckBox Content="Register in DNS"
+                                                          ToolTip="Register this connection's addresses in DNS"
+                                                          VerticalAlignment="Center"
+                                                          Margin="0,0,16,0"
+                                                          IsChecked="{Binding RegistersInDns, Mode=OneWay}"
+                                                          Tag="{Binding}"
+                                                          Click="ToggleDnsRegistration_Click"
+                                                          Visibility="{Binding HasIp, Converter={StaticResource BoolToVis}}" />
                                                 <TextBlock Style="{StaticResource DetailText}"
                                                            Text="{Binding Speed}"
                                                            Visibility="{Binding HasSpeed, Converter={StaticResource BoolToVis}}" />

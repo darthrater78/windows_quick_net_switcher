@@ -840,6 +840,51 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void ToggleDnsRegistration_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox box || box.Tag is not AdapterViewModel adapter)
+            return;
+
+        var register = box.IsChecked == true;
+        var adapterId = adapter.AdapterId;
+        var name = adapter.Name;
+
+        ShowStatus($"{(register ? "Turning on" : "Turning off")} DNS registration for {name}...");
+        box.IsEnabled = false;
+
+        // async void: anything thrown here and not caught would end the process.
+        try
+        {
+            var success = await Task.Run(() =>
+                NetworkAdapterService.SetDnsRegistration(adapterId, register));
+
+            if (success)
+            {
+                ShowStatus($"DNS registration {(register ? "on" : "off")} for {name}");
+                await LoadAdaptersAsync();
+            }
+            else
+            {
+                ShowError($"Failed to change DNS registration for {name}");
+                RevertDnsBox(box, register);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Error: {ex.Message}");
+            RevertDnsBox(box, register);
+        }
+        finally
+        {
+            box.IsEnabled = true;
+        }
+    }
+
+    // SetCurrentValue, not a plain assignment: assigning IsChecked would replace the
+    // OneWay binding, and the box would stop following later refreshes.
+    private static void RevertDnsBox(CheckBox box, bool attempted) =>
+        box.SetCurrentValue(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty, !attempted);
+
     private void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
         RefreshCurrentTab();

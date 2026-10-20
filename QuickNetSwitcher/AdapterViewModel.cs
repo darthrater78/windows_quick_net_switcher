@@ -19,6 +19,7 @@ public class AdapterViewModel : INotifyPropertyChanged
     public string DefaultGateway { get; set; } = "";
     public int InterfaceMetric { get; set; }
     public string DnsSuffix { get; set; } = "";
+    public bool RegistersInDns { get; set; }
     public bool HasSpeed => !string.IsNullOrEmpty(Speed);
     public bool HasIp => !string.IsNullOrEmpty(IpAddress);
     public string IpDisplay => HasIp ? $"{IpAddress}{SubnetCidr}" : "";
@@ -103,7 +104,8 @@ public class AdapterViewModel : INotifyPropertyChanged
         SubnetCidr = info.SubnetCidr,
         DefaultGateway = info.DefaultGateway,
         InterfaceMetric = info.InterfaceMetric,
-        DnsSuffix = info.DnsSuffix
+        DnsSuffix = info.DnsSuffix,
+        RegistersInDns = info.RegistersInDns
     };
 
     // Re-reads every field from a fresh WMI snapshot, in place, so the row keeps its
@@ -133,6 +135,7 @@ public class AdapterViewModel : INotifyPropertyChanged
         DefaultGateway = info.DefaultGateway;
         InterfaceMetric = info.InterfaceMetric;
         DnsSuffix = info.DnsSuffix;
+        RegistersInDns = info.RegistersInDns;
 
         Notify(string.Empty);
         return true;
@@ -151,5 +154,6 @@ public class AdapterViewModel : INotifyPropertyChanged
         && SubnetCidr == info.SubnetCidr
         && DefaultGateway == info.DefaultGateway
         && InterfaceMetric == info.InterfaceMetric
-        && DnsSuffix == info.DnsSuffix;
+        && DnsSuffix == info.DnsSuffix
+        && RegistersInDns == info.RegistersInDns;
 }
