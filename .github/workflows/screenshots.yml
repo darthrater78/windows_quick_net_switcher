@@ -1,0 +1,53 @@
+name: Screenshots
+
+# Captures the README's screenshots from a real build on a Windows runner, so they
+# are never mocked up and can be regenerated when the UI changes. The images are an
+# artifact; putting them in docs/screenshots is a separate, reviewed commit.
+#
+# On a branch push rather than a pull request, so the images can be reviewed and
+# committed before the pull request that carries them is opened.
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'QuickNetSwitcher/**/*.xaml'
+      - '.github/scripts/screenshots.ps1'
+      - '.github/workflows/screenshots.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish single-file exe
+        run: dotnet publish QuickNetSwitcher/QuickNetSwitcher.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+
+      # Windows PowerShell, not pwsh: the script uses the .NET Framework's UI
+      # Automation and System.Drawing assemblies.
+      - name: Capture
+        shell: powershell
+        run: .github/scripts/screenshots.ps1 -Exe publish/QuickNetSwitcher.exe -OutDir screenshots
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: screenshots
+          path: screenshots/*.png
+          if-no-files-found: error

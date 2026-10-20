@@ -17,7 +17,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A change that touches only docs or images cannot change the exe, so the Windows
+  # build is skipped for it. The run still succeeds, which is what release.yml's
+  # "passing Build run for this commit" gate reads.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: diff
+        env:
+          # Empty on a manual run, which the script treats as "build".
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: bash .github/scripts/ci-changes.sh "$BASE" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: changes
+    # Skipped only when the diff is known to be docs-only; if the changes job
+    # fails, the build still runs.
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: windows-latest
     timeout-minutes: 15
     steps:

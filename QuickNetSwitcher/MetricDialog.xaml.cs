@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 
 namespace QuickNetSwitcher;
 
@@ -24,8 +25,13 @@ public partial class MetricDialog : Window
         }
         else
         {
-            MessageBox.Show("Enter a value between 1 and 9999.", "Invalid Metric",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            // Said in the dialog, beside the field it is about, rather than in a second
+            // window stacked on top of this one.
+            ErrorText.Visibility = Visibility.Visible;
+            MetricInput.SetResourceReference(Control.BorderBrushProperty, "ErrorBrush");
+            MetricInput.BorderThickness = new Thickness(2);
+            MetricInput.SelectAll();
+            MetricInput.Focus();
         }
     }
 }

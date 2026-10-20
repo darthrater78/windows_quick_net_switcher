@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -9,13 +10,27 @@ public class AppSettings
 {
     public bool PinToDesktop { get; set; } = true;
     public bool MinimizeToTray { get; set; } = true;
-    public bool SimpleView { get; set; } = false;
+    // True shows one line per adapter with details on request; false is "Show all
+    // details". True is the default.
+    public bool SimpleView { get; set; } = true;
     public bool HideDisconnected { get; set; } = false;
 
     // null means "follow the Windows app theme", which is the default until the
     // user actually picks one. A plain bool could not express that: it would have
     // to default to light and would silently override the OS setting.
     public bool? DarkMode { get; set; }
+
+    // Look up names for outside addresses in the firewall log viewer. Off by default:
+    // a reverse lookup can tell the owner of an address that it was noticed.
+    public bool ResolveOutsideNames { get; set; } = false;
+
+    // Firewall logging this app turned on ("Domain/dropped"), turned off again when it
+    // closes -- or on the next launch, if it did not close cleanly. Entries are only
+    // ever used to turn logging off, so an edited file can't turn anything on.
+    public List<string> LoggingToTurnOff { get; set; } = new();
+
+    // One of ThemeService.Accents; anything else is treated as the default.
+    public string Accent { get; set; } = ThemeService.DefaultAccent;
 }
 
 public static class SettingsService

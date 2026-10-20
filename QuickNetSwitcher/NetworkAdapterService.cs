@@ -20,7 +20,8 @@ public record AdapterInfo(
     string SubnetCidr,
     string DefaultGateway,
     int InterfaceMetric,
-    string DnsSuffix);
+    string DnsSuffix,
+    bool RegistersInDns);
 
 public static class NetworkAdapterService
 {
@@ -28,9 +29,9 @@ public static class NetworkAdapterService
     {
         var adapters = new List<AdapterInfo>();
 
-        var configMap = new Dictionary<string, (string Ip, string Cidr, string Gateway, int Metric, string DnsSuffix)>();
+        var configMap = new Dictionary<string, (string Ip, string Cidr, string Gateway, int Metric, string DnsSuffix, bool RegistersInDns)>();
         using (var cfgSearcher = new ManagementObjectSearcher(
-            "SELECT Index, IPAddress, IPSubnet, DefaultIPGateway, IPConnectionMetric, DNSDomain FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = True"))
+            "SELECT Index, IPAddress, IPSubnet, DefaultIPGateway, IPConnectionMetric, DNSDomain, FullDNSRegistrationEnabled FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = True"))
         {
             foreach (ManagementObject cfg in cfgSearcher.Get())
             {
@@ -40,6 +41,7 @@ public static class NetworkAdapterService
                 var gateways = cfg["DefaultIPGateway"] as string[];
                 var metric = cfg["IPConnectionMetric"] != null ? Convert.ToInt32(cfg["IPConnectionMetric"]) : 0;
                 var dnsSuffix = cfg["DNSDomain"]?.ToString() ?? "";
+                var registersInDns = cfg["FullDNSRegistrationEnabled"] is true;
 
                 if (string.IsNullOrEmpty(index) || ips is not { Length: > 0 })
                     continue;
@@ -50,7 +52,7 @@ public static class NetworkAdapterService
                     cidr = $"/{MaskToCidr(subnets[0])}";
                 var gateway = gateways is { Length: > 0 } ? gateways[0] : "";
 
-                configMap[index] = (ip, cidr, gateway, metric, dnsSuffix);
+                configMap[index] = (ip, cidr, gateway, metric, dnsSuffix, registersInDns);
             }
         }
 
@@ -131,7 +133,7 @@ public static class NetworkAdapterService
                 name, description, adapterId, interfaceIndex, adapterType,
                 isEnabled, status, speed, mac,
                 netConfig.Ip ?? "", netConfig.Cidr ?? "", netConfig.Gateway ?? "",
-                netConfig.Metric, dnsSuffix));
+                netConfig.Metric, dnsSuffix, netConfig.RegistersInDns));
         }
 
         return adapters.OrderBy(a => a.Name).ToList();
@@ -185,6 +187,35 @@ public static class NetworkAdapterService
         var result = NetshRunner.Run(
             "interface", "ipv4", "set", "interface", interfaceAlias, $"metric={metric}");
         return result?.ExitCode == 0;
+    }
+
+    // "Register this connection's addresses in DNS" from the adapter's Advanced TCP/IP
+    // settings. SetDynamicDNSRegistration sets that flag and the "use this connection's
+    // DNS suffix" flag together, so the suffix flag is read first and written back
+    // unchanged.
+    public static bool SetDnsRegistration(string adapterId, bool register)
+    {
+        if (!uint.TryParse(adapterId, out var index))
+            return false;
+
+        using var searcher = new ManagementObjectSearcher(
+            $"SELECT * FROM Win32_NetworkAdapterConfiguration WHERE Index = {index}");
+
+        foreach (ManagementObject cfg in searcher.Get())
+        {
+            var useSuffix = cfg["DomainDNSRegistrationEnabled"] is true;
+
+            using var inParams = cfg.GetMethodParameters("SetDynamicDNSRegistration");
+            inParams["FullDNSRegistrationEnabled"] = register;
+            inParams["DomainDNSRegistrationEnabled"] = useSuffix;
+
+            using var outParams = cfg.InvokeMethod("SetDynamicDNSRegistration", inParams, null);
+            // 0 is success; 1 is success that takes effect after a restart.
+            var code = outParams?["ReturnValue"] is { } rv ? Convert.ToUInt32(rv) : uint.MaxValue;
+            return code is 0 or 1;
+        }
+
+        return false;
     }
 
     private static int MaskToCidr(string mask)

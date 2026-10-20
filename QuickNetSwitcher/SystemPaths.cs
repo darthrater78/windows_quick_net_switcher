@@ -13,9 +13,11 @@ namespace QuickNetSwitcher;
 // runs elevated. Both directories below are writable only by administrators.
 public static class SystemPaths
 {
-    private static readonly string WindowsDir = ResolveWindowsDir();
+    public static readonly string WindowsDir = ResolveWindowsDir();
 
     public static readonly string Netsh = Path.Combine(WindowsDir, "System32", "netsh.exe");
+    public static readonly string Ipconfig = Path.Combine(WindowsDir, "System32", "ipconfig.exe");
+    public static readonly string Wevtutil = Path.Combine(WindowsDir, "System32", "wevtutil.exe");
 
     // explorer.exe lives in the Windows directory itself, not System32.
     public static readonly string Explorer = Path.Combine(WindowsDir, "explorer.exe");
