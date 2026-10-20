@@ -17,6 +17,8 @@ A small Windows utility for switching network adapters and firewall profiles on 
 - Drag-to-reorder the adapter list by its handle, with a translucent ghost of the whole row following the pointer and a bar marking where it will land — order is remembered between launches
 - Hide disconnected adapters, to cut the list down to the ones actually carrying a network
 - Edit an adapter's interface metric (1–9999) by clicking the metric in its details
+- Turn "Register this connection's addresses in DNS" on or off from an adapter's details; the box shows what Windows has set
+- "Register now" re-registers the computer in DNS and checks the result: whether the name now points at the adapter's address, its reverse record, and any DNS Client warnings in the System event log
 
 **Route Table tab**
 - View the system route table with friendly adapter names
@@ -24,6 +26,11 @@ A small Windows utility for switching network adapters and firewall profiles on 
 
 **Firewall tab**
 - Toggle Windows Firewall on/off per profile (Domain, Private, Public)
+- Turn logging of dropped packets and allowed connections on or off per profile
+- View the firewall log in the app, newest first, filtered by dropped/allowed and by address or port, and following new lines as Windows writes them
+
+**Activity log**
+- A log above the footer, opened from its "Log" link, records DNS registration runs, logging changes and errors; copy it to the clipboard
 
 **General**
 - System tray icon — minimize to tray and keep it running in the background
@@ -66,16 +73,21 @@ including the parts that are worth knowing before you run it elevated.
 
 ### Why it needs administrator
 
-Three operations are gated behind admin rights by Windows itself:
+These operations are gated behind admin rights by Windows itself:
 
 | Operation | Mechanism | Why elevation is required |
 |---|---|---|
 | Enable/disable an adapter | WMI `Win32_NetworkAdapter.Enable()` / `.Disable()` | Changing device state is an administrative operation |
 | Change an interface metric | `netsh interface ipv4 set interface` | Modifies the system routing configuration |
 | Toggle a firewall profile | `netsh advfirewall set <profile>profile state` | Modifies Windows Firewall policy |
+| Turn firewall logging on/off | `netsh advfirewall set <profile>profile logging droppedconnections\|allowedconnections` | Modifies Windows Firewall policy |
+| Turn DNS registration on/off | WMI `Win32_NetworkAdapterConfiguration.SetDynamicDNSRegistration` | Changes the adapter's TCP/IP configuration |
+| Register now | `ipconfig /registerdns` | Asks the DNS Client service to re-register every adapter |
+| Read the firewall log | Opens `pfirewall.log` read-only | The log folder is readable only by administrators |
 
 Everything else the app does — listing adapters, reading the route table,
-reading firewall state — is read-only.
+reading firewall state and logging settings, reading DNS Client events — is
+read-only.
 
 ### Scope of elevation
 
@@ -125,14 +137,18 @@ Every value that reaches a privileged call is constrained before it gets there:
 |---|---|---|
 | WMI `Enable`/`Disable` | Adapter `DeviceID`, originally read from WMI | `int.TryParse` must succeed before the value is interpolated into the WQL query, so a non-numeric value is rejected rather than embedded |
 | `netsh interface ipv4 set interface` | The metric dialog — the only free-text input in the app | Validated twice, in the dialog and again in the service: integer, 1–9999. The interface alias comes from WMI, not from typed input |
-| `netsh advfirewall set` | Firewall profile name | Limited to the three literals the parser produces (`Domain`, `Private`, `Public`); never free text |
+| `netsh advfirewall set` | Firewall profile name | Checked against an allowlist of `Domain`, `Private`, `Public` in the service before any `netsh` call; never free text |
+| WMI `SetDynamicDNSRegistration` | Adapter `DeviceID`, from WMI | Parsed as an unsigned integer before it is placed in the WQL query. The "use this connection's DNS suffix" flag is read and written back unchanged |
+| `wevtutil qe System` | A time stamp the app generates | The event query is built only from the run's own start time, formatted invariantly |
+| Reading `pfirewall.log` | The log path, from firewall policy (the registry) | Read unexpanded, then only `%systemroot%`/`%windir%` are expanded, from the Windows directory rather than the environment. Refused unless it resolves to a file on a local fixed drive: no UNC or device path, no mapped network drive, and no symbolic link on the file or any folder above it — an elevated read of a network path would send this account's credentials to that server. Opened read-only and shared, for one read at a time |
 
 Every `Process.Start` call sets `UseShellExecute = false`, so arguments are
 passed directly to the target process — no shell is involved and no shell
 metacharacters are interpreted. The `netsh` calls all go through one runner
 (`NetshRunner.cs`) that passes each argument separately rather than as a single
 string, and kills a `netsh` that has not finished within 5 seconds, reporting it
-as a failure rather than waiting on it.
+as a failure rather than waiting on it. `ipconfig` and `wevtutil` go through the
+same runner (`ProcessRunner.cs`) with a 15-second limit.
 
 The executables themselves are launched by **absolute path**, resolved once in
 `SystemPaths.cs`, rather than by bare name. This matters because `CreateProcess`
@@ -151,14 +167,18 @@ as the bare-name launch above, through the loader rather than through
 
 ### What the app does not do
 
-- **No network I/O.** There is no HTTP client, socket, or listener anywhere in
-  the codebase. No telemetry, no analytics, no crash reporting, no update check.
-  The only outbound action is handing a `github.com` URL to `explorer.exe` when
-  you click one of the two links in the footer.
+- **No network I/O beyond DNS lookups you ask for.** There is no HTTP client,
+  socket, or listener anywhere in the codebase. No telemetry, no analytics, no
+  crash reporting, no update check. "Register now" sends DNS queries for this
+  computer's name and address to the DNS servers Windows already uses, through
+  the Windows DNS API, and nothing else. The only other outbound action is
+  handing a `github.com` URL to `explorer.exe` when you click one of the two
+  links in the footer.
 - **No credentials or secrets.** Nothing is authenticated and nothing is stored
   that could be one.
-- **No machine-wide changes outside the three operations above.** No services,
-  scheduled tasks, drivers, or `HKLM` writes.
+- **No machine-wide changes outside the operations above.** No services,
+  scheduled tasks or drivers, and no direct `HKLM` writes: firewall and DNS
+  settings change only through `netsh`, WMI and `ipconfig`.
 - **No auto-start.** The app registers no logon task and no `Run` entry; it runs
   only when you launch it. See
   [Why there is no "start with Windows"](#why-there-is-no-start-with-windows).
@@ -199,6 +219,9 @@ Stated plainly rather than left for you to discover:
   `SetParent` to place this elevated window underneath a window owned by the
   unelevated desktop shell. It is an unusual arrangement; turn the setting off
   if you would rather not have it.
+- **Firewall logging state is read from the registry.** The app reads the local
+  firewall policy and Group Policy keys for each profile; a setting made by
+  Group Policy is shown but can't be changed here.
 - **Exception text is shown in the UI.** Error messages from WMI and `netsh` are
   written to the status line verbatim, which can expose internal detail. For a
   local single-user utility this is informative rather than sensitive.
@@ -244,7 +267,10 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 - **Disabled or just disconnected:** These are different states and WMI reports them with different properties. `ConfigManagerErrorCode == 22` (`CM_PROB_DISABLED`) is the device being switched off, which is what **Disable** in Network Connections does; `NetConnectionStatus` describes the connection on top of it. `NetEnabled` is deliberately not used for this, because it follows the connection rather than the device: an adapter that is enabled and merely idle — a Bluetooth PAN with nothing paired, an unplugged cable, Wi-Fi out of range — reports `NetEnabled = false`.
 - **Live status:** `NetworkChange.NetworkAddressChanged` and `NetworkAvailabilityChanged` are OS notifications rather than a poll, and they cover the case that matters — coming off a network. One disconnect raises several of them, on a thread pool thread, so they are marshalled to the UI thread and collapsed into a single refresh 750ms after the burst settles. A 10-second `DispatcherTimer` sits behind them as a backstop for changes those events do not raise (an adapter enabled or disabled from Network Connections, a speed or metric change); it runs only while the adapter list is actually on screen, so nothing ticks in the tray, minimised, or on another tab. A refresh updates the existing rows in place, matched on `DeviceID`, rather than rebuilding the list.
 - **Route Table:** WMI queries the system route table and resolves adapter indexes to friendly names for display.
-- **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`.
+- **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`. Logging settings are read from the registry (`...\SharedAccess\Parameters\FirewallPolicy\<profile>\Logging`, with Group Policy values taking precedence) and changed with `netsh advfirewall set <profile>profile logging`.
+- **Firewall log viewer:** Every 2 seconds, while the viewer is open on screen with "Follow new lines" ticked, the app reads only the bytes added to the log since the last read (at most 1 MB per read, the last 256 KB on opening) and shows the newest 500 lines. A log that Windows has rolled over to `.old` is noticed from its creation time or size, and reading starts again from the new file.
+- **DNS registration:** The checkbox reads `FullDNSRegistrationEnabled` from `Win32_NetworkAdapterConfiguration` and writes it with `SetDynamicDNSRegistration`. "Register now" runs `ipconfig /registerdns`, then queries `HOST.<primary suffix>` (or the connection's suffix) with `DnsQuery` using the network only, bypassing the cache and hosts file, every 3 seconds for up to 30 seconds, checks the reverse record, and reads DNS Client warnings from the System log with `wevtutil`.
+- **Closing:** Background work — the DNS check and the log viewer — is tied to one cancellation token and timer that closing the window or exiting from the tray stops. The log file is open only for the moment of each read, and helpers have time limits, so nothing can hold the app open.
 - **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
 - **Simple view:** A flag on each `AdapterViewModel` hides the row's detail line, leaving the name, the status in words, the address and the switch. It is on by default; "Show all details" turns it off. Clicking a row sets a second flag, `IsExpanded`, that opens just that row; the window remembers which rows are open by adapter id, because a full reload rebuilds the view models. In simple view the window switches to `SizeToContent="Height"` so it fits the list instead of holding its full height; this applies only on the Adapters tab, since the route table would measure to every row it holds.
 - **Hide disconnected:** A filter on the adapter list's `ICollectionView`, so hidden adapters stay in the underlying collection and the saved display order keeps its full set. A filter is not re-evaluated when an item's own properties change, so the view is refreshed explicitly after a status update — otherwise an adapter that had just dropped its link would sit there until the list was rebuilt. Disabled adapters are never filtered out — switching one back on is what the app is for, and hiding it would put the row you just toggled off out of reach. The count of what the filter removed is shown on the checkbox itself, since the status line carrying it is overwritten by the next action.
@@ -258,7 +284,7 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 ## Architecture
 
 A single WPF project with no external dependencies beyond `System.Management`
-(the WMI client). Roughly 3,400 lines of C# and XAML in total.
+(the WMI client). Roughly 4,500 lines of C# and XAML in total.
 
 ```
 QuickNetSwitcher.sln
@@ -268,18 +294,26 @@ QuickNetSwitcher.sln
     ├── Themes/Dark.xaml            Dark palette (same key set)
     ├── App.xaml / App.xaml.cs      Application entry point; control styles and fonts
     ├── MainWindow.xaml(.cs)        The single window: three tabs, tray icon, all event handling
+    ├── MainWindow.Logging.cs       Activity log, Register now, firewall logging and log viewer
     ├── MetricDialog.xaml(.cs)      Modal dialog for editing an interface metric
     │
     ├── NetworkAdapterService.cs    WMI adapter discovery; enable/disable; metric via netsh
     ├── RouteTableService.cs        WMI route table query and interface-name resolution
     ├── FirewallService.cs          Firewall profile read/write via netsh advfirewall
+    ├── FirewallLoggingService.cs   Per-profile logging: registry read, netsh write, log path checks
+    ├── FirewallLogTail.cs          Reads new lines from pfirewall.log
+    ├── DnsRegistrationService.cs   Register now: ipconfig, DNS check, DNS Client events
+    ├── DnsLookup.cs                DnsQuery interop, network only
+    ├── ProcessRunner.cs            Starts helpers by absolute path, with a time limit
+    ├── NetshRunner.cs              netsh through ProcessRunner
+    ├── ActivityLog.cs              The activity log's lines, capped at 1,000
     ├── LegacyStartupCleanup.cs     Removes the dead pre-1.3.0 Run key entry
     ├── ThemeService.cs             Light/dark palette swap, accent, title bar, OS theme lookup
     ├── DragGhostAdorner.cs         Translucent row preview shown while reordering
     ├── DesktopPinService.cs        user32 interop for the desktop-layer pin
     ├── SettingsService.cs          settings.json load/save
     ├── AdapterOrderService.cs      adapter_order.json load/save, order application
-    ├── SystemPaths.cs              Absolute paths to netsh.exe and explorer.exe
+    ├── SystemPaths.cs              Absolute paths to netsh, ipconfig, wevtutil and explorer
     │
     ├── AdapterViewModel.cs         Display model for an adapter row
     └── FirewallViewModel.cs        Display model for a firewall profile row
@@ -305,14 +339,15 @@ The code splits into three layers with a deliberately simple shape:
   every few seconds is why the rows are updated rather than rebuilt — a rebuild
   would drop the selection and re-apply the saved order over a drag in progress.
 - **`MainWindow`** holds the UI and all event handlers, and is the only place
-  that coordinates between services and the view. At ~1,100 lines it is by far the
+  that coordinates between services and the view. The logging features live in
+  a second file of the same class, `MainWindow.Logging.cs`. At ~1,100 lines it is by far the
   largest file in the project.
 
 ### Threading
 
 Nothing that waits on WMI or `netsh` runs on the UI thread. The three
-state-changing operations — adapter toggle, firewall toggle, and metric change —
-and the three loads (adapters, route table, firewall status) all run through
+state-changing operations — adapter toggle, firewall toggle, metric change, DNS
+registration and firewall logging changes — and the three loads (adapters, route table, firewall status) all run through
 `Task.Run`, with only the result marshalled back to update the list and the
 status line. The automatic adapter refresh reads off-thread the same way; only
 the merge into the collection touches the UI thread.

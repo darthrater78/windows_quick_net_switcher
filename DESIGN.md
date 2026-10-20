@@ -173,9 +173,11 @@ Window 620×580, minimum 500×450, margin 14px sides and 10px top and bottom.
 Top to bottom: segmented tabs, the tab's filters (10px above and below), the
 list, the footer. Rows are 54px minimum with 4px between them; row padding 7px
 vertical, 14px right. An adapter row reads handle (26px), name over status,
-address, switch. Its details open below a 1px `line`, wrapping. The footer
-holds the status message at left; GitHub, Release notes, Refresh, Settings at
-right. Route grid cells 10px × 6px, metric right-aligned.
+address, switch. Its details open below a 1px `line`, wrapping. A firewall
+profile row always shows its logging details the same way. The footer holds
+the status message at left; Log, GitHub, Release notes, Refresh, Settings at
+right. The activity log opens between the list and the footer, 10px above it.
+Route grid and firewall log cells 10px × 6px, metric right-aligned.
 
 ## Elevation & Depth
 
@@ -199,8 +201,16 @@ checkbox boxes. Switches are 52×28 and fully round, with an 18px thumb.
 - **Buttons:** outlined by default; one filled button (Apply); underlined
   links; 28px icon buttons. Hover and pressed lay an 8% and 16% wash over the
   button; nothing fades.
-- **Checkbox:** 16px, for filters and menu items.
-- **Route grid:** horizontal lines only; selected row is `hover`.
+- **Checkbox:** 16px, for filters, menu items and settings inside a row's
+  details (Register in DNS, firewall logging). A setting Windows reports as
+  managed by Group Policy is shown disabled with the words "Set by Group
+  Policy".
+- **Route grid / firewall log:** horizontal lines only; selected row is
+  `hover`. The firewall log is newest first, the action in words (Dropped,
+  Allowed), never in a status colour.
+- **Activity log:** `card` pane with a 1px `line` edge, 150px of 12px data
+  font, oldest at top; error lines in `error`. Copy and Close as links. No file dialog: it would
+  run elevated with the rest of the app.
 - **Footer status:** `text-secondary`; `error` when the action failed.
 
 ## Do's and Don'ts

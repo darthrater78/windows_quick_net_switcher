@@ -20,6 +20,8 @@ public class AdapterViewModel : INotifyPropertyChanged
     public int InterfaceMetric { get; set; }
     public string DnsSuffix { get; set; } = "";
     public bool RegistersInDns { get; set; }
+    // "Register now" only makes sense for an adapter Windows will register.
+    public bool CanRegisterNow => RegistersInDns && HasIp;
     public bool HasSpeed => !string.IsNullOrEmpty(Speed);
     public bool HasIp => !string.IsNullOrEmpty(IpAddress);
     public string IpDisplay => HasIp ? $"{IpAddress}{SubnetCidr}" : "";

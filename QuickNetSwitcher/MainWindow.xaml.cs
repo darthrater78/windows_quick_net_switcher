@@ -79,6 +79,7 @@ public partial class MainWindow : Window
         AdapterList.ItemsSource = _adapters;
         _adapterView = CollectionViewSource.GetDefaultView(_adapters);
         _adapterView.Filter = IsAdapterVisible;
+        InitLogging();
         _ = LoadAdaptersAsync();
         StartAdapterWatch();
 
@@ -135,7 +136,13 @@ public partial class MainWindow : Window
     // change does not read like a completed one.
     private void ShowStatus(string message) => SetStatus(message, "TextSecondaryBrush");
 
-    private void ShowError(string message) => SetStatus(message, "ErrorBrush");
+    // Errors also go to the activity log, so one that scrolls out of the footer is
+    // still there to read.
+    private void ShowError(string message)
+    {
+        SetStatus(message, "ErrorBrush");
+        _activity.Append(LogLine.Error(message));
+    }
 
     private void SetStatus(string message, string brushKey)
     {
@@ -919,6 +926,7 @@ public partial class MainWindow : Window
 
         UpdateWindowSizing();
         UpdateAutoRefreshState();
+        UpdateFirewallTailState();
 
         if (MainTabs.SelectedIndex == 1 && _allRoutes.Count == 0)
             _ = LoadRoutesAsync();
@@ -942,6 +950,7 @@ public partial class MainWindow : Window
         }
 
         UpdateAutoRefreshState();
+        UpdateFirewallTailState();
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -964,6 +973,7 @@ public partial class MainWindow : Window
         NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
         _autoRefreshTimer.Stop();
         _networkChangeDebounce.Stop();
+        StopBackgroundWork();
 
         _trayIcon?.Dispose();
         _trayIcon = null;

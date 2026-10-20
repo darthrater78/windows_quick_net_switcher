@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace QuickNetSwitcher;
 
-public record FirewallProfile(string Name, bool IsEnabled);
+public record FirewallProfile(string Name, bool IsEnabled, FirewallLogging Logging);
 
 public static class FirewallService
 {
@@ -27,7 +27,7 @@ public static class FirewallService
             else if (currentProfile != null && line.StartsWith("State", StringComparison.OrdinalIgnoreCase))
             {
                 var isOn = line.Contains("ON", StringComparison.OrdinalIgnoreCase);
-                profiles.Add(new FirewallProfile(currentProfile, isOn));
+                profiles.Add(new FirewallProfile(currentProfile, isOn, FirewallLoggingService.Read(currentProfile)));
                 currentProfile = null;
             }
         }
@@ -37,6 +37,9 @@ public static class FirewallService
 
     public static bool SetProfileState(string profileName, bool enable)
     {
+        if (!FirewallLoggingService.IsKnownProfile(profileName))
+            return false;
+
         var state = enable ? "on" : "off";
         var result = NetshRunner.Run(
             "advfirewall", "set", $"{profileName.ToLowerInvariant()}profile", "state", state);

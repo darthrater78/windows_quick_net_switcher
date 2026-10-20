@@ -24,6 +24,32 @@
             <Setter Property="Margin" Value="0,0,16,0" />
         </Style>
 
+        <!-- Cells of the route grid and the firewall log: lines only, selected row
+             in the hover tone. -->
+        <Style x:Key="GridCell" TargetType="DataGridCell">
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="RouteHeader" TargetType="DataGridColumnHeader">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
@@ -39,6 +65,7 @@
     <Grid Margin="14,10,14,10">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -114,7 +141,7 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <!-- Clicking the row opens its details; the handle, the
-                                     switch, the metric link and the DNS box keep their own clicks. -->
+                                     switch, the metric link and the DNS controls keep their own clicks. -->
                                 <Grid x:Name="row"
                                       Background="Transparent"
                                       MinHeight="54"
@@ -233,6 +260,15 @@
                                                           Tag="{Binding}"
                                                           Click="ToggleDnsRegistration_Click"
                                                           Visibility="{Binding HasIp, Converter={StaticResource BoolToVis}}" />
+                                                <Button Style="{StaticResource LinkButton}"
+                                                        Content="Register now"
+                                                        ToolTip="Register this computer in DNS now and check the result. Windows registers every adapter that has the box ticked."
+                                                        FontSize="12"
+                                                        Padding="0,4"
+                                                        Margin="0,0,16,0"
+                                                        Tag="{Binding}"
+                                                        Click="RegisterDnsNow_Click"
+                                                        Visibility="{Binding CanRegisterNow, Converter={StaticResource BoolToVis}}" />
                                                 <TextBlock Style="{StaticResource DetailText}"
                                                            Text="{Binding Speed}"
                                                            Visibility="{Binding HasSpeed, Converter={StaticResource BoolToVis}}" />
@@ -313,32 +349,8 @@
                                   CanUserResizeRows="False"
                                   FontSize="12"
                                   FontFamily="{StaticResource DataFont}"
-                                  ColumnHeaderStyle="{StaticResource RouteHeader}">
-                            <DataGrid.CellStyle>
-                                <Style TargetType="DataGridCell">
-                                    <Setter Property="Padding" Value="10,6" />
-                                    <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-                                    <Setter Property="BorderThickness" Value="0" />
-                                    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="DataGridCell">
-                                                <Border Padding="{TemplateBinding Padding}"
-                                                        Background="{TemplateBinding Background}">
-                                                    <ContentPresenter VerticalAlignment="Center" />
-                                                </Border>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                    <Style.Triggers>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
-                                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </DataGrid.CellStyle>
+                                  ColumnHeaderStyle="{StaticResource RouteHeader}"
+                                  CellStyle="{StaticResource GridCell}">
                             <DataGrid.Columns>
                                 <!-- Wide enough for the longest IPv4 prefix, 255.255.255.255/32. -->
                                 <DataGridTextColumn Header="Destination" Binding="{Binding DisplayDestination}" Width="156" />
@@ -369,65 +381,239 @@
                 <TabItem.Tag>
                     <CornerRadius>0,5,5,0</CornerRadius>
                 </TabItem.Tag>
-                <ItemsControl x:Name="FirewallList" Margin="0,10,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid MinHeight="54" Margin="0,0,0,4">
-                                <Rectangle x:Name="frame"
-                                           RadiusX="6" RadiusY="6"
-                                           Fill="{DynamicResource CardBrush}"
-                                           Stroke="{DynamicResource BorderBrush}"
-                                           StrokeThickness="1" />
-                                <Grid Margin="14,7,14,7">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock x:Name="name"
-                                                   Text="{Binding Name}"
-                                                   FontSize="16" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource TextPrimaryBrush}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding Description}"
+                <Grid>
+                    <!-- The profiles, with each one's logging settings in its details. -->
+                    <ItemsControl x:Name="FirewallList" Margin="0,10,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid MinHeight="54" Margin="0,0,0,4">
+                                    <Rectangle x:Name="frame"
+                                               RadiusX="6" RadiusY="6"
+                                               Fill="{DynamicResource CardBrush}"
+                                               Stroke="{DynamicResource BorderBrush}"
+                                               StrokeThickness="1" />
+                                    <Grid Margin="14,7,14,7">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock x:Name="name"
+                                                       Text="{Binding Name}"
+                                                       FontSize="16" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Description}"
+                                                       FontSize="12"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <!-- The state in words, so the switch is not the
+                                             only thing saying it. -->
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Status}"
                                                    FontSize="12"
                                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Margin="0,2,0,0" />
-                                    </StackPanel>
-                                    <!-- The state in words, so the switch is not the
-                                         only thing saying it. -->
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Status}"
-                                               FontSize="12"
-                                               Foreground="{DynamicResource TextSecondaryBrush}"
-                                               VerticalAlignment="Center"
-                                               Margin="14,0,14,0" />
-                                    <CheckBox Grid.Column="2"
-                                              Style="{StaticResource ToggleSwitchStyle}"
-                                              VerticalAlignment="Center"
-                                              IsChecked="{Binding IsEnabled, Mode=OneWay}"
-                                              Click="ToggleFirewall_Click"
-                                              Tag="{Binding ProfileKey}" />
+                                                   VerticalAlignment="Center"
+                                                   Margin="14,0,14,0" />
+                                        <CheckBox Grid.Column="2"
+                                                  Style="{StaticResource ToggleSwitchStyle}"
+                                                  VerticalAlignment="Center"
+                                                  IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                                  Click="ToggleFirewall_Click"
+                                                  Tag="{Binding ProfileKey}" />
+
+                                        <!-- Logging. The boxes show what Windows has set; a
+                                             Group Policy setting can't be changed here. -->
+                                        <Border Grid.Row="1" Grid.ColumnSpan="3"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                BorderThickness="0,1,0,0"
+                                                Margin="0,7,0,0" Padding="0,5,0,0">
+                                            <WrapPanel>
+                                                <CheckBox Content="Log dropped packets"
+                                                          VerticalAlignment="Center"
+                                                          Margin="0,4,16,4"
+                                                          IsChecked="{Binding LogDropped, Mode=OneWay}"
+                                                          IsEnabled="{Binding CanChangeLogging}"
+                                                          Tag="{Binding}"
+                                                          Click="LogDropped_Click" />
+                                                <CheckBox Content="Log allowed connections"
+                                                          VerticalAlignment="Center"
+                                                          Margin="0,4,16,4"
+                                                          IsChecked="{Binding LogAllowed, Mode=OneWay}"
+                                                          IsEnabled="{Binding CanChangeLogging}"
+                                                          Tag="{Binding}"
+                                                          Click="LogAllowed_Click" />
+                                                <Button Style="{StaticResource LinkButton}"
+                                                        Content="View log"
+                                                        FontSize="12"
+                                                        Padding="0,4"
+                                                        Margin="0,0,16,0"
+                                                        Tag="{Binding}"
+                                                        Click="ViewFirewallLog_Click"
+                                                        Visibility="{Binding CanViewLog, Converter={StaticResource BoolToVis}}" />
+                                                <TextBlock Style="{StaticResource DetailText}"
+                                                           Text="{Binding LogFileDisplay}"
+                                                           Visibility="{Binding IsLogging, Converter={StaticResource BoolToVis}}" />
+                                                <TextBlock Style="{StaticResource DetailText}"
+                                                           FontFamily="{StaticResource UiFont}"
+                                                           Text="Set by Group Policy"
+                                                           Visibility="{Binding LoggingSetByPolicy, Converter={StaticResource BoolToVis}}" />
+                                                <TextBlock Style="{StaticResource DetailText}"
+                                                           FontFamily="{StaticResource UiFont}"
+                                                           Text="Log file isn't on a local drive, so it isn't opened here"
+                                                           Visibility="{Binding LogPathRefused, Converter={StaticResource BoolToVis}}" />
+                                            </WrapPanel>
+                                        </Border>
+                                    </Grid>
                                 </Grid>
-                            </Grid>
-                            <DataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding IsEnabled}" Value="False">
-                                    <Setter TargetName="frame" Property="Fill" Value="Transparent" />
-                                    <Setter TargetName="frame" Property="StrokeDashArray" Value="4 3" />
-                                    <Setter TargetName="name" Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
-                                </DataTrigger>
-                            </DataTemplate.Triggers>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                        <Setter TargetName="frame" Property="Fill" Value="Transparent" />
+                                        <Setter TargetName="frame" Property="StrokeDashArray" Value="4 3" />
+                                        <Setter TargetName="name" Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- The log viewer, in place of the profiles while it is open. -->
+                    <Grid x:Name="FirewallLogView" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <DockPanel Grid.Row="0" Margin="0,10,0,10" LastChildFill="False">
+                            <Button DockPanel.Dock="Left"
+                                    Style="{StaticResource LinkButton}"
+                                    Content="← Profiles"
+                                    FontSize="12"
+                                    Padding="0,4"
+                                    Margin="0,0,16,0"
+                                    Click="CloseFirewallLog_Click" />
+                            <CheckBox x:Name="FwShowDropped" DockPanel.Dock="Left" Content="Dropped" IsChecked="True"
+                                      VerticalAlignment="Center" Margin="0,0,16,0"
+                                      Checked="FirewallLogFilter_Changed" Unchecked="FirewallLogFilter_Changed" />
+                            <CheckBox x:Name="FwShowAllowed" DockPanel.Dock="Left" Content="Allowed" IsChecked="True"
+                                      VerticalAlignment="Center" Margin="0,0,16,0"
+                                      Checked="FirewallLogFilter_Changed" Unchecked="FirewallLogFilter_Changed" />
+                            <CheckBox x:Name="FwFollow" DockPanel.Dock="Left" Content="Follow new lines" IsChecked="True"
+                                      VerticalAlignment="Center"
+                                      ToolTip="Add new lines as Windows writes them. Windows writes the log in batches, so a line can arrive a few seconds late."
+                                      Checked="FirewallFollow_Changed" Unchecked="FirewallFollow_Changed" />
+                            <Button DockPanel.Dock="Right"
+                                    Style="{StaticResource LinkButton}"
+                                    Content="Copy"
+                                    ToolTip="Copy the selected lines"
+                                    FontSize="12"
+                                    Padding="0,4"
+                                    Margin="10,0,0,0"
+                                    Click="CopyFirewallLog_Click" />
+                            <TextBox x:Name="FwFilterBox" DockPanel.Dock="Right"
+                                     Width="130" FontSize="12" Padding="8,3"
+                                     FontFamily="{StaticResource DataFont}"
+                                     MaxLength="64"
+                                     ToolTip="Show only lines whose source or destination contains this"
+                                     AutomationProperties.Name="Filter by IP or port"
+                                     TextChanged="FirewallLogFilter_Changed" />
+                        </DockPanel>
+
+                        <Border Grid.Row="1"
+                                Background="{DynamicResource CardBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="1">
+                            <!-- Newest first, so new lines arrive at the top. -->
+                            <DataGrid x:Name="FirewallLogGrid"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      HeadersVisibility="Column"
+                                      GridLinesVisibility="Horizontal"
+                                      HorizontalGridLinesBrush="{DynamicResource BorderBrush}"
+                                      BorderThickness="0"
+                                      Background="Transparent"
+                                      RowBackground="Transparent"
+                                      SelectionMode="Extended"
+                                      ClipboardCopyMode="ExcludeHeader"
+                                      CanUserResizeRows="False"
+                                      CanUserSortColumns="False"
+                                      FontSize="12"
+                                      FontFamily="{StaticResource DataFont}"
+                                      ColumnHeaderStyle="{StaticResource RouteHeader}"
+                                      CellStyle="{StaticResource GridCell}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="72" />
+                                    <DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="70" FontFamily="{StaticResource UiFont}" />
+                                    <DataGridTextColumn Header="Proto" Binding="{Binding Protocol}" Width="52" />
+                                    <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
+                                    <DataGridTextColumn Header="Destination" Binding="{Binding Destination}" Width="*" />
+                                    <DataGridTextColumn Header="Dir" Binding="{Binding Direction}" Width="44" FontFamily="{StaticResource UiFont}" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+                    </Grid>
+                </Grid>
             </TabItem>
         </TabControl>
 
         <!-- Footer: what just happened on the left, and on the right the two links
              every view keeps, then Refresh and Settings. -->
-        <DockPanel Grid.Row="1" Margin="0,8,0,0">
+        <!-- Activity log: what the app did, line by line. Opened from the footer's
+             Log link, or by an action that writes to it. -->
+        <Border x:Name="ActivityPane" Grid.Row="1"
+                Visibility="Collapsed"
+                Margin="0,10,0,0"
+                Background="{DynamicResource CardBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="10,7">
+            <DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,5">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}"
+                            Content="Close" FontSize="12" Padding="0,2" Margin="12,0,0,0"
+                            Click="CloseActivityLog_Click" />
+                    <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}"
+                            Content="Copy" FontSize="12" Padding="0,2"
+                            Click="CopyActivityLog_Click" />
+                    <TextBlock Text="Activity log" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               VerticalAlignment="Center" />
+                </DockPanel>
+                <ScrollViewer x:Name="ActivityScroll" Height="150"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="ActivityList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock x:Name="line"
+                                           Text="{Binding Display}"
+                                           FontSize="12"
+                                           FontFamily="{StaticResource DataFont}"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           TextWrapping="Wrap" />
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsError}" Value="True">
+                                        <Setter TargetName="line" Property="Foreground" Value="{DynamicResource ErrorBrush}" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <DockPanel Grid.Row="2" Margin="0,8,0,0">
             <!-- Set-once preferences live behind the gear; the filters that change
                  what you are looking at stay under the tabs. -->
             <Button x:Name="SettingsButton"
@@ -487,6 +673,14 @@
                     Padding="0,4"
                     Margin="12,0,12,0"
                     Click="GitHubLink_Click" />
+            <Button DockPanel.Dock="Right"
+                    Style="{StaticResource LinkButton}"
+                    Content="Log"
+                    ToolTip="Show or hide the activity log"
+                    FontSize="12"
+                    Padding="0,4"
+                    Margin="12,0,0,0"
+                    Click="ToggleActivityLog_Click" />
             <TextBlock x:Name="StatusText"
                        Text="Ready"
                        FontSize="12"
