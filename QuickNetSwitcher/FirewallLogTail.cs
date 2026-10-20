@@ -1,16 +1,56 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Text;
 
 namespace QuickNetSwitcher;
 
-public record FirewallLogEntry(string Time, string Action, string Protocol, string Source,
-    string Destination, string Direction)
+// One line of pfirewall.log. The interface, profile and names are filled in after
+// parsing (FirewallHits, NameResolver), so they notify.
+public sealed class FirewallLogEntry : INotifyPropertyChanged
 {
+    public DateTime When { get; init; }
+    public string Time => When.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+    public string Action { get; init; } = "";
+    public string Protocol { get; init; } = "";
+    public string SourceIp { get; init; } = "";
+    public string SourcePort { get; init; } = "";
+    public string DestIp { get; init; } = "";
+    public string DestPort { get; init; } = "";
+    public string Direction { get; init; } = "";
+
+    public string Source => Endpoint(SourceIp, SourcePort);
+    public string Destination => Endpoint(DestIp, DestPort);
     public bool IsDropped => Action == "Dropped";
     public bool IsAllowed => Action == "Allowed";
+
+    private string _interface = "";
+    private string _profile = "";
+    private string _sourceName = "";
+    private string _destName = "";
+
+    public string Interface { get => _interface; set => Set(ref _interface, value, nameof(Interface)); }
+    public string Profile { get => _profile; set => Set(ref _profile, value, nameof(Profile)); }
+    public string SourceName { get => _sourceName; set => Set(ref _sourceName, value, nameof(SourceName)); }
+    public string DestName { get => _destName; set => Set(ref _destName, value, nameof(DestName)); }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Set(ref string field, string value, string name)
+    {
+        if (field == value) return;
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
+    private static string Endpoint(string address, string port)
+    {
+        if (port == "-" || port.Length == 0) return address;
+        return address.Contains(':') ? $"[{address}]:{port}" : $"{address}:{port}";
+    }
 }
 
 public record TailResult(List<FirewallLogEntry> NewEntries, long FileSize, bool Missing, bool Restarted);
@@ -112,6 +152,10 @@ public sealed class FirewallLogTail
         if (f.Length < 8)
             return null;
 
+        if (!DateTime.TryParseExact($"{f[0]} {f[1]}", "yyyy-MM-dd HH:mm:ss",
+                CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var when))
+            return null;
+
         var action = f[2] switch
         {
             "DROP" => "Dropped",
@@ -122,15 +166,17 @@ public sealed class FirewallLogTail
             ? f[16] switch { "RECEIVE" => "in", "SEND" => "out", "FORWARD" => "fwd", _ => Clip(f[16]) }
             : "";
 
-        return new FirewallLogEntry(Clip(f[1]), action, Clip(f[3]),
-            Endpoint(f[4], f[6]), Endpoint(f[5], f[7]), direction);
-    }
-
-    private static string Endpoint(string address, string port)
-    {
-        address = Clip(address);
-        if (port == "-" || port.Length == 0) return address;
-        return address.Contains(':') ? $"[{address}]:{Clip(port)}" : $"{address}:{Clip(port)}";
+        return new FirewallLogEntry
+        {
+            When = when,
+            Action = action,
+            Protocol = Clip(f[3]),
+            SourceIp = Clip(f[4]),
+            DestIp = Clip(f[5]),
+            SourcePort = Clip(f[6]),
+            DestPort = Clip(f[7]),
+            Direction = direction
+        };
     }
 
     private static string Clip(string value) =>

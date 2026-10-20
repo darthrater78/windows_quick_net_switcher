@@ -176,7 +176,11 @@ vertical, 14px right. An adapter row reads handle (26px), name over status,
 address, switch. Its details open below a 1px `line`, wrapping. A firewall
 profile row always shows its logging details the same way. The footer holds
 the status message at left; Log, GitHub, Release notes, Refresh, Settings at
-right. The activity log opens between the list and the footer, 10px above it.
+right. The activity log opens between the list and the footer and shares the
+height with the list 1:3 by default; a 10px drag bar (a 36×3px `control-outline`
+grip) between them changes the share, which holds as the window is resized.
+While the window fits itself to the adapter list the log is 160px instead.
+On the Firewall tab, the hits panel fills the space under the profile rows.
 Route grid and firewall log cells 10px × 6px, metric right-aligned.
 
 ## Elevation & Depth
@@ -208,9 +212,19 @@ checkbox boxes. Switches are 52×28 and fully round, with an 18px thumb.
 - **Route grid / firewall log:** horizontal lines only; selected row is
   `hover`. The firewall log is newest first, the action in words (Dropped,
   Allowed), never in a status colour.
-- **Activity log:** `card` pane with a 1px `line` edge, 150px of 12px data
-  font, oldest at top; error lines in `error`. Copy and Close as links. No file dialog: it would
-  run elevated with the rest of the app.
+- **Activity log:** `card` pane with a 1px `line` edge, 12px data font, oldest
+  at top, selectable; error lines in `error`. Copy, Clear and Close as links. No file
+  dialog: it would run elevated with the rest of the app.
+- **Hits panel:** `card` pane, title line in `text-secondary` with Clear and
+  Open viewer links; a route-style grid of the busiest sources with dropped and
+  allowed counts, profile, interface and ports. Every grid header sorts on
+  click.
+- **Addresses in a grid:** the address on the first line in the data font, its
+  name under it in 12px UI font, `text-secondary`. The address is never
+  replaced by the name.
+- **Header filter:** a 10px funnel glyph after a column name, `text-secondary`;
+  `accent` while that column hides any value. It opens a checklist of the
+  column's values.
 - **Footer status:** `text-secondary`; `error` when the action failed.
 
 ## Do's and Don'ts

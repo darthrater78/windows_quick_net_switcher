@@ -368,6 +368,8 @@ public partial class MainWindow : Window
             SizeToContent = SizeToContent.Manual;
         }
 
+        ApplyActivityLayout();
+
         // SizeChanged is raised during the layout pass these assignments trigger, and
         // that pass runs after this method returns -- so the guard cannot be cleared
         // synchronously. Loaded priority is serviced once layout and render are done.
@@ -718,8 +720,9 @@ public partial class MainWindow : Window
             FirewallList.ItemsSource = profiles;
             _firewallLoaded = true;
 
-            var onCount = profiles.Count(p => p.IsEnabled);
-            ShowStatus($"{profiles.Count} firewall profiles  ·  {onCount} enabled");
+            ShowFirewallSummary();
+            UpdateHitsView();
+            _ = RefreshNetworkMapAsync();
         }
         catch (Exception ex)
         {

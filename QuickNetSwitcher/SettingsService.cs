@@ -19,6 +19,10 @@ public class AppSettings
     // to default to light and would silently override the OS setting.
     public bool? DarkMode { get; set; }
 
+    // Look up names for outside addresses in the firewall log viewer. Off by default:
+    // a reverse lookup can tell the owner of an address that it was noticed.
+    public bool ResolveOutsideNames { get; set; } = false;
+
     // One of ThemeService.Accents; anything else is treated as the default.
     public string Accent { get; set; } = ThemeService.DefaultAccent;
 }

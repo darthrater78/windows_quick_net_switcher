@@ -50,6 +50,17 @@
             </Style.Triggers>
         </Style>
 
+        <!-- The funnel in a log column's header; accent-coloured while that column
+             is filtered. -->
+        <Style x:Key="HeaderFilterButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Content" Value="&#xE71C;" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        </Style>
+
         <Style x:Key="RouteHeader" TargetType="DataGridColumnHeader">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
@@ -64,8 +75,9 @@
 
     <Grid Margin="14,10,14,10">
         <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
+            <RowDefinition x:Name="ContentRow" Height="3*" MinHeight="200" />
             <RowDefinition Height="Auto" />
+            <RowDefinition x:Name="ActivityRow" Height="0" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -383,7 +395,12 @@
                 </TabItem.Tag>
                 <Grid>
                     <!-- The profiles, with each one's logging settings in its details. -->
-                    <ItemsControl x:Name="FirewallList" Margin="0,10,0,0">
+                    <Grid x:Name="FirewallMain">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" MinHeight="120" />
+                    </Grid.RowDefinitions>
+                    <ItemsControl x:Name="FirewallList" Grid.Row="0" Margin="0,10,0,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Grid MinHeight="54" Margin="0,0,0,4">
@@ -408,7 +425,8 @@
                                                        FontSize="16" FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextPrimaryBrush}"
                                                        TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding Description}"
+                                            <TextBlock Text="{Binding InUseOn}"
+                                                       ToolTip="{Binding Description}"
                                                        FontSize="12"
                                                        Foreground="{DynamicResource TextSecondaryBrush}"
                                                        TextTrimming="CharacterEllipsis"
@@ -469,6 +487,10 @@
                                                            FontFamily="{StaticResource UiFont}"
                                                            Text="Log file isn't on a local drive, so it isn't opened here"
                                                            Visibility="{Binding LogPathRefused, Converter={StaticResource BoolToVis}}" />
+                                                <TextBlock Style="{StaticResource DetailText}"
+                                                           FontFamily="{StaticResource UiFont}"
+                                                           Text="{Binding HitsText}"
+                                                           Visibility="{Binding CanViewLog, Converter={StaticResource BoolToVis}}" />
                                             </WrapPanel>
                                         </Border>
                                     </Grid>
@@ -483,6 +505,79 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- Hits: the busiest sources in the last few minutes, dropped and
+                         allowed, with the profile and interface each came in under. -->
+                    <Border Grid.Row="1"
+                            Margin="0,6,0,0"
+                            Background="{DynamicResource CardBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="1">
+                        <DockPanel>
+                            <DockPanel DockPanel.Dock="Top" Margin="9,6,9,4">
+                                <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}"
+                                        Content="Open viewer" FontSize="12" Padding="0,2" Margin="12,0,0,0"
+                                        Click="OpenViewerFromHits_Click" />
+                                <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}"
+                                        Content="Clear" FontSize="12" Padding="0,2"
+                                        ToolTip="Start counting again from now. The log file itself is not changed."
+                                        Click="ClearHits_Click" />
+                                <TextBlock x:Name="HitsTitle"
+                                           Text="Top sources · last 5 minutes"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
+                            </DockPanel>
+                            <Grid>
+                                <TextBlock x:Name="HitsEmpty"
+                                           Text="Turn on logging for a profile to see hits here."
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           Margin="10,4"
+                                           Visibility="Collapsed" />
+                                <DataGrid x:Name="HitsGrid"
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          HeadersVisibility="Column"
+                                          GridLinesVisibility="Horizontal"
+                                          HorizontalGridLinesBrush="{DynamicResource BorderBrush}"
+                                          BorderThickness="0"
+                                          Background="Transparent"
+                                          RowBackground="Transparent"
+                                          SelectionMode="Extended"
+                                          ClipboardCopyMode="ExcludeHeader"
+                                          CanUserResizeRows="False"
+                                          FontSize="12"
+                                          FontFamily="{StaticResource DataFont}"
+                                          ColumnHeaderStyle="{StaticResource RouteHeader}"
+                                          CellStyle="{StaticResource GridCell}">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Source" Width="*" SortMemberPath="Address">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Address}" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding Name}" FontFamily="{StaticResource UiFont}"
+                                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Dropped" Binding="{Binding Dropped}" Width="64" />
+                                        <DataGridTextColumn Header="Allowed" Binding="{Binding Allowed}" Width="64" />
+                                        <DataGridTextColumn Header="Profile" Binding="{Binding Profile}" Width="62" FontFamily="{StaticResource UiFont}" />
+                                        <DataGridTextColumn Header="Interface" Binding="{Binding Interface}" Width="80" FontFamily="{StaticResource UiFont}" />
+                                        <DataGridTextColumn Header="Ports" Binding="{Binding Ports}" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </DockPanel>
+                    </Border>
+                    </Grid>
 
                     <!-- The log viewer, in place of the profiles while it is open. -->
                     <Grid x:Name="FirewallLogView" Visibility="Collapsed">
@@ -505,14 +600,18 @@
                             <CheckBox x:Name="FwShowAllowed" DockPanel.Dock="Left" Content="Allowed" IsChecked="True"
                                       VerticalAlignment="Center" Margin="0,0,16,0"
                                       Checked="FirewallLogFilter_Changed" Unchecked="FirewallLogFilter_Changed" />
+                            <CheckBox x:Name="FwResolveNames" DockPanel.Dock="Left" Content="Resolve names"
+                                      VerticalAlignment="Center" Margin="0,0,16,0"
+                                      ToolTip="Also look up names for outside addresses. Local addresses are always looked up. A lookup can tell an address's owner that it was noticed."
+                                      Click="ResolveNames_Click" />
                             <CheckBox x:Name="FwFollow" DockPanel.Dock="Left" Content="Follow new lines" IsChecked="True"
                                       VerticalAlignment="Center"
                                       ToolTip="Add new lines as Windows writes them. Windows writes the log in batches, so a line can arrive a few seconds late."
                                       Checked="FirewallFollow_Changed" Unchecked="FirewallFollow_Changed" />
                             <Button DockPanel.Dock="Right"
                                     Style="{StaticResource LinkButton}"
-                                    Content="Copy"
-                                    ToolTip="Copy the selected lines"
+                                    Content="Copy all"
+                                    ToolTip="Copy every line shown, in the order shown. Ctrl+C copies only the selected lines."
                                     FontSize="12"
                                     Padding="0,4"
                                     Margin="10,0,0,0"
@@ -532,7 +631,7 @@
                                 BorderThickness="1"
                                 CornerRadius="6"
                                 Padding="1">
-                            <!-- Newest first, so new lines arrive at the top. -->
+                            <!-- Newest first, so new lines arrive at the top, until a header is clicked to sort. -->
                             <DataGrid x:Name="FirewallLogGrid"
                                       AutoGenerateColumns="False"
                                       IsReadOnly="True"
@@ -545,18 +644,72 @@
                                       SelectionMode="Extended"
                                       ClipboardCopyMode="ExcludeHeader"
                                       CanUserResizeRows="False"
-                                      CanUserSortColumns="False"
-                                      FontSize="12"
+                                                                            FontSize="12"
                                       FontFamily="{StaticResource DataFont}"
                                       ColumnHeaderStyle="{StaticResource RouteHeader}"
                                       CellStyle="{StaticResource GridCell}">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="72" />
-                                    <DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="70" FontFamily="{StaticResource UiFont}" />
-                                    <DataGridTextColumn Header="Proto" Binding="{Binding Protocol}" Width="52" />
-                                    <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="*" />
-                                    <DataGridTextColumn Header="Destination" Binding="{Binding Destination}" Width="*" />
-                                    <DataGridTextColumn Header="Dir" Binding="{Binding Direction}" Width="44" FontFamily="{StaticResource UiFont}" />
+                                    <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="64" SortMemberPath="When" />
+                                    <DataGridTextColumn Binding="{Binding Action}" Width="78" FontFamily="{StaticResource UiFont}">
+                                        <DataGridTextColumn.Header>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Action" VerticalAlignment="Center" />
+                                                <Button Style="{StaticResource HeaderFilterButton}" Tag="Action" Click="HeaderFilter_Click"
+                                                        ToolTip="Filter by action" AutomationProperties.Name="Filter by action" />
+                                            </StackPanel>
+                                        </DataGridTextColumn.Header>
+                                    </DataGridTextColumn>
+                                    <DataGridTextColumn Binding="{Binding Protocol}" Width="62">
+                                        <DataGridTextColumn.Header>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Proto" VerticalAlignment="Center" />
+                                                <Button Style="{StaticResource HeaderFilterButton}" Tag="Protocol" Click="HeaderFilter_Click"
+                                                        ToolTip="Filter by proto" AutomationProperties.Name="Filter by proto" />
+                                            </StackPanel>
+                                        </DataGridTextColumn.Header>
+                                    </DataGridTextColumn>
+                                    <DataGridTemplateColumn Header="Source" Width="*" SortMemberPath="SourceIp">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Source}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding SourceName}" FontFamily="{StaticResource UiFont}"
+                                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="Destination" Width="*" SortMemberPath="DestIp">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Destination}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding DestName}" FontFamily="{StaticResource UiFont}"
+                                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Binding="{Binding Interface}" Width="86" FontFamily="{StaticResource UiFont}">
+                                        <DataGridTextColumn.Header>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Interface" VerticalAlignment="Center" />
+                                                <Button Style="{StaticResource HeaderFilterButton}" Tag="Interface" Click="HeaderFilter_Click"
+                                                        ToolTip="Filter by interface" AutomationProperties.Name="Filter by interface" />
+                                            </StackPanel>
+                                        </DataGridTextColumn.Header>
+                                    </DataGridTextColumn>
+                                    <DataGridTextColumn Binding="{Binding Profile}" Width="70" FontFamily="{StaticResource UiFont}">
+                                        <DataGridTextColumn.Header>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Profile" VerticalAlignment="Center" />
+                                                <Button Style="{StaticResource HeaderFilterButton}" Tag="Profile" Click="HeaderFilter_Click"
+                                                        ToolTip="Filter by profile" AutomationProperties.Name="Filter by profile" />
+                                            </StackPanel>
+                                        </DataGridTextColumn.Header>
+                                    </DataGridTextColumn>
                                 </DataGrid.Columns>
                             </DataGrid>
                         </Border>
@@ -569,9 +722,32 @@
              every view keeps, then Refresh and Settings. -->
         <!-- Activity log: what the app did, line by line. Opened from the footer's
              Log link, or by an action that writes to it. -->
-        <Border x:Name="ActivityPane" Grid.Row="1"
+        <!-- Drag to share the height between the list and the activity log. Star
+             rows, so the split keeps its proportion when the window is resized. -->
+        <GridSplitter x:Name="ActivitySplitter" Grid.Row="1"
+                      Visibility="Collapsed"
+                      Height="10"
+                      HorizontalAlignment="Stretch"
+                      ResizeDirection="Rows"
+                      ResizeBehavior="PreviousAndNext"
+                      Background="Transparent"
+                      Cursor="SizeNS"
+                      ToolTip="Drag to resize the activity log"
+                      AutomationProperties.Name="Resize the activity log">
+            <GridSplitter.Template>
+                <ControlTemplate TargetType="GridSplitter">
+                    <Border Background="Transparent">
+                        <Rectangle Width="36" Height="3" RadiusX="1.5" RadiusY="1.5"
+                                   Fill="{DynamicResource ControlBorderBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </GridSplitter.Template>
+        </GridSplitter>
+
+        <Border x:Name="ActivityPane" Grid.Row="2"
                 Visibility="Collapsed"
-                Margin="0,10,0,0"
+                MinHeight="70"
                 Background="{DynamicResource CardBrush}"
                 BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="1"
@@ -583,37 +759,37 @@
                             Content="Close" FontSize="12" Padding="0,2" Margin="12,0,0,0"
                             Click="CloseActivityLog_Click" />
                     <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}"
+                            Content="Clear" FontSize="12" Padding="0,2" Margin="12,0,0,0"
+                            Click="ClearActivityLog_Click" />
+                    <Button DockPanel.Dock="Right" Style="{StaticResource LinkButton}"
                             Content="Copy" FontSize="12" Padding="0,2"
                             Click="CopyActivityLog_Click" />
                     <TextBlock Text="Activity log" FontSize="12"
                                Foreground="{DynamicResource TextSecondaryBrush}"
                                VerticalAlignment="Center" />
                 </DockPanel>
-                <ScrollViewer x:Name="ActivityScroll" Height="150"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl x:Name="ActivityList">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock x:Name="line"
-                                           Text="{Binding Display}"
-                                           FontSize="12"
-                                           FontFamily="{StaticResource DataFont}"
-                                           Foreground="{DynamicResource TextPrimaryBrush}"
-                                           TextWrapping="Wrap" />
-                                <DataTemplate.Triggers>
-                                    <DataTrigger Binding="{Binding IsError}" Value="True">
-                                        <Setter TargetName="line" Property="Foreground" Value="{DynamicResource ErrorBrush}" />
-                                    </DataTrigger>
-                                </DataTemplate.Triggers>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                <!-- Read-only rich text rather than a list, so any part of the log can be
+                     highlighted and copied, while error lines keep their colour. -->
+                <RichTextBox x:Name="ActivityText"
+                             IsReadOnly="True"
+                             IsReadOnlyCaretVisible="False"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Padding="0"
+                             FontFamily="{StaticResource DataFont}"
+                             FontSize="12"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             SelectionBrush="{DynamicResource AccentFillBrush}"
+                             FocusVisualStyle="{x:Null}"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Disabled"
+                             AutomationProperties.Name="Activity log">
+                    <FlowDocument PagePadding="0" />
+                </RichTextBox>
             </DockPanel>
         </Border>
 
-        <DockPanel Grid.Row="2" Margin="0,8,0,0">
+        <DockPanel Grid.Row="3" Margin="0,8,0,0">
             <!-- Set-once preferences live behind the gear; the filters that change
                  what you are looking at stay under the tabs. -->
             <Button x:Name="SettingsButton"

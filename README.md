@@ -27,10 +27,12 @@ A small Windows utility for switching network adapters and firewall profiles on 
 **Firewall tab**
 - Toggle Windows Firewall on/off per profile (Domain, Private, Public)
 - Turn logging of dropped packets and allowed connections on or off per profile
-- View the firewall log in the app, newest first, filtered by dropped/allowed and by address or port, and following new lines as Windows writes them
+- A hits panel under the profiles shows the busiest source addresses in the last 5 minutes, with how many of their packets were dropped and allowed, the profile and interface they came in under, and the ports they hit. Each profile row shows which network it is in use on and its own dropped/allowed counts. Clear starts the count again; every column sorts
+- View the firewall log in the app, newest first, following new lines as Windows writes them. Sort by any column, filter by action, protocol, interface or profile from the column headers, by dropped/allowed, or by address, port or name. "Copy all" copies every line shown; Ctrl+C copies the selected ones
+- Names next to addresses: local-network addresses are looked up automatically; outside addresses only when "Resolve names" is ticked in the viewer. The address is always shown
 
 **Activity log**
-- A log above the footer, opened from its "Log" link, records DNS registration runs, logging changes and errors; copy it to the clipboard
+- A log above the footer, opened from its "Log" link, records DNS registration runs, logging changes and errors; highlight any part of it, or copy or clear it all. Drag the bar above it to resize; it keeps its share of the window as the window is resized
 
 **General**
 - System tray icon — minimize to tray and keep it running in the background
@@ -167,11 +169,15 @@ as the bare-name launch above, through the loader rather than through
 
 ### What the app does not do
 
-- **No network I/O beyond DNS lookups you ask for.** There is no HTTP client,
-  socket, or listener anywhere in the codebase. No telemetry, no analytics, no
-  crash reporting, no update check. "Register now" sends DNS queries for this
-  computer's name and address to the DNS servers Windows already uses, through
-  the Windows DNS API, and nothing else. The only other outbound action is
+- **No network I/O beyond DNS lookups.** There is no HTTP client, socket, or
+  listener anywhere in the codebase. No telemetry, no analytics, no crash
+  reporting, no update check. DNS queries go only to the DNS servers Windows
+  already uses, through the Windows DNS API: "Register now" looks up this
+  computer's name and address, and the firewall views look up the names of
+  local-network addresses in the log. Outside addresses are looked up only when
+  you tick "Resolve names", because the reverse zone of an outside address
+  usually belongs to whoever controls it, and a lookup can tell them their
+  traffic was noticed. Names are cached for the session. The only other outbound action is
   handing a `github.com` URL to `explorer.exe` when you click one of the two
   links in the footer.
 - **No credentials or secrets.** Nothing is authenticated and nothing is stored
@@ -269,6 +275,7 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 - **Route Table:** WMI queries the system route table and resolves adapter indexes to friendly names for display.
 - **Firewall:** Profile state is read and set with `netsh advfirewall set <profile>profile state on|off`. Logging settings are read from the registry (`...\SharedAccess\Parameters\FirewallPolicy\<profile>\Logging`, with Group Policy values taking precedence) and changed with `netsh advfirewall set <profile>profile logging`.
 - **Firewall log viewer:** Every 2 seconds, while the viewer is open on screen with "Follow new lines" ticked, the app reads only the bytes added to the log since the last read (at most 1 MB per read, the last 256 KB on opening) and shows the newest 500 lines. A log that Windows has rolled over to `.old` is noticed from its creation time or size, and reading starts again from the new file.
+- **Firewall hits:** The log records neither the interface nor the profile, so each hit is placed by its local address: the destination of an inbound packet, the source of an outbound one. An exact match with an adapter's address names that adapter; broadcast and multicast traffic is matched by subnet instead. The profile is the network category Windows has given that interface (`MSFT_NetConnectionProfile` in `root\StandardCimv2`), read when the hit is read and refreshed every 30 seconds. Hits that match no adapter, such as loopback traffic, carry no profile. The last 5 minutes are kept in memory, at most 20,000 hits.
 - **DNS registration:** The checkbox reads `FullDNSRegistrationEnabled` from `Win32_NetworkAdapterConfiguration` and writes it with `SetDynamicDNSRegistration`. "Register now" runs `ipconfig /registerdns`, then queries `HOST.<primary suffix>` (or the connection's suffix) with `DnsQuery` using the network only, bypassing the cache and hosts file, every 3 seconds for up to 30 seconds, checks the reverse record, and reads DNS Client warnings from the System log with `wevtutil`.
 - **Closing:** Background work — the DNS check and the log viewer — is tied to one cancellation token and timer that closing the window or exiting from the tray stops. The log file is open only for the moment of each read, and helpers have time limits, so nothing can hold the app open.
 - **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
@@ -284,7 +291,7 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 ## Architecture
 
 A single WPF project with no external dependencies beyond `System.Management`
-(the WMI client). Roughly 4,500 lines of C# and XAML in total.
+(the WMI client). Roughly 5,600 lines of C# and XAML in total.
 
 ```
 QuickNetSwitcher.sln
@@ -295,6 +302,7 @@ QuickNetSwitcher.sln
     ├── App.xaml / App.xaml.cs      Application entry point; control styles and fonts
     ├── MainWindow.xaml(.cs)        The single window: three tabs, tray icon, all event handling
     ├── MainWindow.Logging.cs       Activity log, Register now, firewall logging and log viewer
+    ├── MainWindow.Hits.cs          The Firewall tab's hits panel
     ├── MetricDialog.xaml(.cs)      Modal dialog for editing an interface metric
     │
     ├── NetworkAdapterService.cs    WMI adapter discovery; enable/disable; metric via netsh
@@ -307,6 +315,9 @@ QuickNetSwitcher.sln
     ├── ProcessRunner.cs            Starts helpers by absolute path, with a time limit
     ├── NetshRunner.cs              netsh through ProcessRunner
     ├── ActivityLog.cs              The activity log's lines, capped at 1,000
+    ├── FirewallHits.cs             The last 5 minutes of hits, counted by profile and source
+    ├── NetworkMap.cs               Which adapter and profile each address belongs to
+    ├── NameResolver.cs             Cached reverse-DNS names, local addresses only unless asked
     ├── LegacyStartupCleanup.cs     Removes the dead pre-1.3.0 Run key entry
     ├── ThemeService.cs             Light/dark palette swap, accent, title bar, OS theme lookup
     ├── DragGhostAdorner.cs         Translucent row preview shown while reordering

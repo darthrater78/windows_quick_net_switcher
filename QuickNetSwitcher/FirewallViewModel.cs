@@ -1,7 +1,9 @@
 #nullable enable
+using System.ComponentModel;
+
 namespace QuickNetSwitcher;
 
-public class FirewallViewModel
+public class FirewallViewModel : INotifyPropertyChanged
 {
     public string Name { get; set; } = "";
     public string ProfileKey { get; set; } = "";
@@ -22,6 +24,27 @@ public class FirewallViewModel
     public bool IsLogging => LogDropped || LogAllowed;
     public bool CanViewLog => IsLogging && LogFile != null;
     public bool LogPathRefused => IsLogging && LogFile == null;
+    // Which networks Windows has put under this profile, and its hits in the hits
+    // panel's window. Both change while the row is on screen.
+    private string _inUseOn = "";
+    private string _hitsText = "";
+
+    public string InUseOn
+    {
+        get => _inUseOn;
+        set { if (_inUseOn != value) { _inUseOn = value; Notify(nameof(InUseOn)); } }
+    }
+
+    public string HitsText
+    {
+        get => _hitsText;
+        set { if (_hitsText != value) { _hitsText = value; Notify(nameof(HitsText)); } }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Notify(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
     public string LogFileDisplay => $"{LogFileName} · {LogMaxSizeKb / 1024.0:0.#} MB max";
 
     public static FirewallViewModel FromProfile(FirewallProfile profile) => new()
@@ -30,6 +53,13 @@ public class FirewallViewModel
         ProfileKey = profile.Name,
         IsEnabled = profile.IsEnabled,
         Description = profile.Name switch
+        {
+            "Domain" => "Active when connected to a domain network",
+            "Private" => "Active on trusted home or work networks",
+            "Public" => "Active on public networks like Wi-Fi hotspots",
+            _ => ""
+        },
+        InUseOn = profile.Name switch
         {
             "Domain" => "Active when connected to a domain network",
             "Private" => "Active on trusted home or work networks",

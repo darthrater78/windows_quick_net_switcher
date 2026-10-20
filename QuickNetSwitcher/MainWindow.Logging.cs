@@ -1,6 +1,8 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -10,7 +12,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Threading;
+using WinForms = System.Windows.Forms;
 
 namespace QuickNetSwitcher;
 
@@ -32,12 +36,11 @@ public partial class MainWindow
     private FirewallLogTail? _firewallTail;
     private bool _firewallTailInFlight;
     private bool _dnsRegisterRunning;
+    private readonly Dictionary<string, HashSet<string>> _hiddenValues = new();
 
     private void InitLogging()
     {
-        ActivityList.ItemsSource = _activity;
-        _activity.CollectionChanged += (_, _) =>
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, ActivityScroll.ScrollToEnd);
+        _activity.CollectionChanged += OnActivityChanged;
 
         FirewallLogGrid.ItemsSource = _firewallLog;
         _firewallLogView = CollectionViewSource.GetDefaultView(_firewallLog);
@@ -46,6 +49,8 @@ public partial class MainWindow
         _firewallTailTimer.Tick += (_, _) => _ = ReadFirewallLogAsync();
         IsVisibleChanged += (_, _) => UpdateFirewallTailState();
 
+        InitHits();
+
         // Covers the tray's Exit, which shuts the app down without a normal close.
         Dispatcher.ShutdownStarted += (_, _) => StopBackgroundWork();
     }
@@ -53,6 +58,7 @@ public partial class MainWindow
     private void StopBackgroundWork()
     {
         _firewallTailTimer.Stop();
+        _hitsTimer.Stop();
         if (!_shutdown.IsCancellationRequested)
             _shutdown.Cancel();
     }
@@ -61,36 +67,111 @@ public partial class MainWindow
 
     private void ShowActivityLog()
     {
-        ActivityPane.Visibility = Visibility.Visible;
-        ActivityScroll.ScrollToEnd();
+        SetActivityVisible(true);
+        ActivityText.ScrollToEnd();
     }
 
     private void ToggleActivityLog_Click(object sender, RoutedEventArgs e)
     {
         if (ActivityPane.Visibility == Visibility.Visible)
-            ActivityPane.Visibility = Visibility.Collapsed;
+            SetActivityVisible(false);
         else
             ShowActivityLog();
     }
 
-    private void CloseActivityLog_Click(object sender, RoutedEventArgs e) =>
-        ActivityPane.Visibility = Visibility.Collapsed;
+    private void CloseActivityLog_Click(object sender, RoutedEventArgs e) => SetActivityVisible(false);
+
+    private void ClearActivityLog_Click(object sender, RoutedEventArgs e) => _activity.Clear();
+
+    // Mirrors the activity log into the text box: one paragraph per line, appended,
+    // trimmed from the top when the log drops its oldest line, emptied on Clear.
+    private void OnActivityChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        var blocks = ActivityText.Document.Blocks;
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add:
+                foreach (LogLine line in e.NewItems!)
+                {
+                    var run = new Run(line.Display);
+                    if (line.IsError)
+                        run.SetResourceReference(TextElement.ForegroundProperty, "ErrorBrush");
+                    blocks.Add(new Paragraph(run) { Margin = new Thickness(0) });
+                }
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, ActivityText.ScrollToEnd);
+                break;
+            case NotifyCollectionChangedAction.Remove:
+                if (blocks.FirstBlock != null)
+                    blocks.Remove(blocks.FirstBlock);
+                break;
+            case NotifyCollectionChangedAction.Reset:
+                blocks.Clear();
+                break;
+        }
+    }
+
+    private void SetActivityVisible(bool show)
+    {
+        ActivityPane.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        ApplyActivityLayout();
+    }
+
+    // The list and the log share the height in proportion (star rows), so the log
+    // grows and shrinks with the window, and the splitter between them sets the
+    // proportion. While the window sizes itself to the adapter list, star rows would
+    // measure the log to its full length, so it takes a fixed height instead.
+    private void ApplyActivityLayout()
+    {
+        var show = ActivityPane.Visibility == Visibility.Visible;
+        var fit = SizeToContent == SizeToContent.Height;
+
+        ActivitySplitter.Visibility = show && !fit ? Visibility.Visible : Visibility.Collapsed;
+        ContentRow.MinHeight = fit ? 0 : 200;
+        if (!ContentRow.Height.IsStar)
+            ContentRow.Height = new GridLength(3, GridUnitType.Star);
+
+        if (!show)
+            ActivityRow.Height = new GridLength(0);
+        else if (fit)
+            ActivityRow.Height = new GridLength(160);
+        else if (!ActivityRow.Height.IsStar)
+            ActivityRow.Height = new GridLength(1, GridUnitType.Star);
+    }
 
     private void CopyActivityLog_Click(object sender, RoutedEventArgs e) =>
         CopyText(_activity.AsText(), "Activity log copied");
 
+    // WPF's Clipboard.SetText gives up the moment another program holds the clipboard
+    // open -- a clipboard manager, or Remote Desktop's clipboard sharing -- and often
+    // reports that failure even though the text was copied. The Windows Forms call
+    // retries (10 times, 100 ms apart), and a failure is only reported if the text is
+    // really not on the clipboard.
     private void CopyText(string text, string done)
     {
         if (text.Length == 0) return;
         try
         {
-            Clipboard.SetText(text);
+            WinForms.Clipboard.SetDataObject(text, true, 10, 100);
             ShowStatus(done);
         }
-        catch (COMException)
+        catch (ExternalException)
         {
-            // Another program has the clipboard open.
-            ShowError("Couldn't copy: the clipboard is busy");
+            if (ClipboardHolds(text))
+                ShowStatus(done);
+            else
+                ShowError("Couldn't copy: another program is holding the clipboard");
+        }
+    }
+
+    private static bool ClipboardHolds(string text)
+    {
+        try
+        {
+            return WinForms.Clipboard.GetText() == text;
+        }
+        catch (ExternalException)
+        {
+            return false;
         }
     }
 
@@ -185,12 +266,15 @@ public partial class MainWindow
 
     private void ViewFirewallLog_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: FirewallViewModel { LogFile: { } path } })
-            return;
+        if (sender is Button { Tag: FirewallViewModel { LogFile: { } path } })
+            OpenFirewallLog(path);
+    }
 
+    private void OpenFirewallLog(string path)
+    {
         _firewallTail = new FirewallLogTail(path);
         _firewallLog.Clear();
-        FirewallList.Visibility = Visibility.Collapsed;
+        FirewallMain.Visibility = Visibility.Collapsed;
         FirewallLogView.Visibility = Visibility.Visible;
         _ = ReadFirewallLogAsync();
         UpdateFirewallTailState();
@@ -201,22 +285,34 @@ public partial class MainWindow
     private void CloseFirewallLog()
     {
         FirewallLogView.Visibility = Visibility.Collapsed;
-        FirewallList.Visibility = Visibility.Visible;
+        FirewallMain.Visibility = Visibility.Visible;
         _firewallTail = null;
         _firewallLog.Clear();
         UpdateFirewallTailState();
+        ShowFirewallSummary();
     }
 
-    // Follows the file only while someone can see it: the viewer open, on the Firewall
-    // tab, the window on screen, and Follow ticked.
+    // The log is read only while someone can see the result: the Firewall tab on
+    // screen, and then either the viewer (with Follow ticked) or the hits panel.
     private void UpdateFirewallTailState()
     {
-        var follow = IsVisible && WindowState != WindowState.Minimized
-                     && MainTabs.SelectedIndex == 2 && IsFirewallLogOpen
-                     && FwFollow.IsChecked == true && !_shutdown.IsCancellationRequested;
+        var onScreen = IsVisible && WindowState != WindowState.Minimized
+                       && MainTabs.SelectedIndex == 2 && !_shutdown.IsCancellationRequested;
+        var follow = onScreen && IsFirewallLogOpen && FwFollow.IsChecked == true;
+        var hits = onScreen && !IsFirewallLogOpen;
 
         if (follow) _firewallTailTimer.Start();
         else _firewallTailTimer.Stop();
+
+        if (hits && !_hitsTimer.IsEnabled)
+        {
+            _hitsTimer.Start();
+            _ = ReadHitsAsync();
+        }
+        else if (!hits)
+        {
+            _hitsTimer.Stop();
+        }
     }
 
     private void FirewallFollow_Changed(object sender, RoutedEventArgs e)
@@ -249,9 +345,17 @@ public partial class MainWindow
             if (result.Restarted)
                 _firewallLog.Clear();
 
+            if (_networkMapAt == DateTime.MinValue)
+                await RefreshNetworkMapAsync();
+
             // Newest first: the file's last line goes to the top.
             foreach (var entry in result.NewEntries)
+            {
+                Place(entry);
+                entry.SourceName = _names!.Lookup(entry.SourceIp);
+                entry.DestName = _names.Lookup(entry.DestIp);
                 _firewallLog.Insert(0, entry);
+            }
             while (_firewallLog.Count > MaxFirewallLogRows)
                 _firewallLog.RemoveAt(_firewallLog.Count - 1);
 
@@ -276,11 +380,17 @@ public partial class MainWindow
         if (item is not FirewallLogEntry entry) return false;
         if (entry.IsDropped && FwShowDropped.IsChecked != true) return false;
         if (entry.IsAllowed && FwShowAllowed.IsChecked != true) return false;
+        foreach (var (key, hidden) in _hiddenValues)
+        {
+            if (hidden.Contains(ColumnValue(entry, key))) return false;
+        }
 
         var text = FwFilterBox.Text.Trim();
         return text.Length == 0
                || entry.Source.Contains(text, StringComparison.OrdinalIgnoreCase)
-               || entry.Destination.Contains(text, StringComparison.OrdinalIgnoreCase);
+               || entry.Destination.Contains(text, StringComparison.OrdinalIgnoreCase)
+               || entry.SourceName.Contains(text, StringComparison.OrdinalIgnoreCase)
+               || entry.DestName.Contains(text, StringComparison.OrdinalIgnoreCase);
     }
 
     private void FirewallLogFilter_Changed(object sender, RoutedEventArgs e)
@@ -291,8 +401,79 @@ public partial class MainWindow
 
     private void CopyFirewallLog_Click(object sender, RoutedEventArgs e)
     {
-        var lines = FirewallLogGrid.SelectedItems.OfType<FirewallLogEntry>()
-            .Select(x => $"{x.Time}  {x.Action,-8} {x.Protocol,-5} {x.Source} → {x.Destination}  {x.Direction}");
-        CopyText(string.Join(Environment.NewLine, lines), "Copied the selected lines");
+        // Everything the grid shows -- after the filters, in its current sort order.
+        var shown = _firewallLogView?.Cast<FirewallLogEntry>() ?? Enumerable.Empty<FirewallLogEntry>();
+        var lines = shown
+            .Select(x => $"{x.When:yyyy-MM-dd HH:mm:ss}  {x.Action,-8} {x.Protocol,-5} " +
+                         $"{x.Source}{Named(x.SourceName)} → {x.Destination}{Named(x.DestName)}  {x.Interface} {x.Profile}".TrimEnd());
+        var text = string.Join(Environment.NewLine, lines);
+        CopyText(text, $"Copied {text.Split('\n').Length} lines");
+    }
+
+    private static string Named(string name) => name.Length > 0 ? $" ({name})" : "";
+
+    // --- Column filters in the viewer's headers ---
+
+    private static string ColumnValue(FirewallLogEntry e, string key) => key switch
+    {
+        "Action" => e.Action,
+        "Protocol" => e.Protocol,
+        "Interface" => e.Interface,
+        "Profile" => e.Profile,
+        _ => ""
+    };
+
+    // A checklist of the values in that column. Unticking one hides its lines.
+    private void HeaderFilter_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string key } button) return;
+        e.Handled = true;
+
+        if (!_hiddenValues.TryGetValue(key, out var hidden))
+            _hiddenValues[key] = hidden = new HashSet<string>();
+
+        var menu = new ContextMenu
+        {
+            PlacementTarget = button,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom
+        };
+        var all = new MenuItem { Header = new TextBlock { Text = "Show all" } };
+        all.Click += (_, _) =>
+        {
+            hidden.Clear();
+            ApplyHeaderFilter(button, key);
+        };
+        menu.Items.Add(all);
+        menu.Items.Add(new Separator());
+
+        var values = _firewallLog.Select(x => ColumnValue(x, key)).Concat(hidden)
+            .Distinct().OrderBy(v => v, StringComparer.OrdinalIgnoreCase);
+        foreach (var value in values)
+        {
+            // A TextBlock header, so an underscore in a name is shown, not taken as
+            // a keyboard shortcut.
+            var item = new MenuItem
+            {
+                Header = new TextBlock { Text = value.Length == 0 ? "(none)" : value },
+                IsCheckable = true,
+                IsChecked = !hidden.Contains(value),
+                StaysOpenOnClick = true
+            };
+            item.Click += (_, _) =>
+            {
+                if (item.IsChecked) hidden.Remove(value);
+                else hidden.Add(value);
+                ApplyHeaderFilter(button, key);
+            };
+            menu.Items.Add(item);
+        }
+        menu.IsOpen = true;
+    }
+
+    private void ApplyHeaderFilter(Button button, string key)
+    {
+        button.SetResourceReference(ForegroundProperty,
+            _hiddenValues[key].Count > 0 ? "AccentBrush" : "TextSecondaryBrush");
+        _firewallLogView?.Refresh();
     }
 }

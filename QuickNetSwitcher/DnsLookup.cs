@@ -47,11 +47,27 @@ public static class DnsLookup
     public static List<string> QueryPtr(IPAddress address)
     {
         var found = new List<string>();
-        if (address.AddressFamily != AddressFamily.InterNetwork)
-            return found;
-
         var b = address.GetAddressBytes();
-        var reverse = $"{b[3]}.{b[2]}.{b[1]}.{b[0]}.in-addr.arpa";
+        string reverse;
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            reverse = $"{b[3]}.{b[2]}.{b[1]}.{b[0]}.in-addr.arpa";
+        }
+        else if (address.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            // One label per nibble, lowest first.
+            var nibbles = new List<string>(64);
+            for (var i = b.Length - 1; i >= 0; i--)
+            {
+                nibbles.Add((b[i] & 0xF).ToString("x"));
+                nibbles.Add((b[i] >> 4).ToString("x"));
+            }
+            reverse = string.Join(".", nibbles) + ".ip6.arpa";
+        }
+        else
+        {
+            return found;
+        }
         Query(reverse, TypePtr, record =>
         {
             var host = Marshal.PtrToStringUni(Marshal.ReadIntPtr(record, DataOffset));
