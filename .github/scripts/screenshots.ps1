@@ -3,7 +3,9 @@
 # any Windows desktop, from an elevated prompt (the app requires administrator).
 #
 # It overwrites %LOCALAPPDATA%\QuickNetSwitcher\settings.json to put the app in a
-# known state for each shot, so do not run it where those settings matter.
+# known state for each shot, and turns Windows Firewall logging on for every profile
+# (then off again at the end) so the firewall shots have hits to show. Do not run it
+# where either matters.
 #
 # Usage: screenshots.ps1 -Exe publish\QuickNetSwitcher.exe -OutDir screenshots
 param(
@@ -79,16 +81,56 @@ function Select-Tab([IntPtr]$hwnd, [string]$name) {
     $pattern.Select()
 }
 
-# One screenshot: write the settings, start the app, optionally change tab, capture
-# the window, stop the app.
-function Save-Shot([string]$name, [bool]$simple, [bool]$dark, [string]$tab) {
+# Clicks the first button with this name (a link button's name is its text).
+function Invoke-Button([IntPtr]$hwnd, [string]$name) {
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+    $isButton = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Button)
+    $isNamed = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::NameProperty, $name)
+    $condition = New-Object System.Windows.Automation.AndCondition($isButton, $isNamed)
+    $button = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    if ($null -eq $button) { throw "Button '$name' not found." }
+    $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+}
+
+# Logging on for every profile, and some traffic for it to record, so the hits panel
+# and the log viewer show real lines. Windows writes the log in batches, so this
+# waits for the file to have something in it.
+function Start-FirewallLogging {
+    & netsh advfirewall set allprofiles logging droppedconnections enable | Out-Null
+    & netsh advfirewall set allprofiles logging allowedconnections enable | Out-Null
+    $log = Join-Path $env:SystemRoot 'System32\LogFiles\Firewall\pfirewall.log'
+    $deadline = (Get-Date).AddSeconds(90)
+    do {
+        foreach ($name in 'github.com', 'www.microsoft.com', 'nuget.org') {
+            try { Resolve-DnsName $name -DnsOnly -ErrorAction Stop | Out-Null } catch { }
+            try { Invoke-WebRequest "https://$name" -UseBasicParsing -TimeoutSec 10 | Out-Null } catch { }
+        }
+        Start-Sleep -Seconds 5
+        $size = if (Test-Path $log) { (Get-Item $log).Length } else { 0 }
+    } while ($size -lt 4096 -and (Get-Date) -lt $deadline)
+    Write-Host "pfirewall.log: $size bytes"
+}
+
+function Stop-FirewallLogging {
+    & netsh advfirewall set allprofiles logging droppedconnections disable | Out-Null
+    & netsh advfirewall set allprofiles logging allowedconnections disable | Out-Null
+}
+
+# One screenshot: write the settings, start the app, optionally change tab and click
+# a button, capture the window, stop the app.
+function Save-Shot([string]$name, [bool]$simple, [bool]$dark, [string]$tab,
+                   [string]$button = '', [int]$settle = 4) {
     $settings = [ordered]@{
-        PinToDesktop     = $false
-        MinimizeToTray   = $false
-        SimpleView       = $simple
-        HideDisconnected = $false
-        DarkMode         = $dark
-        Accent           = 'Teal'
+        PinToDesktop        = $false
+        MinimizeToTray      = $false
+        SimpleView          = $simple
+        HideDisconnected    = $false
+        DarkMode            = $dark
+        Accent              = 'Teal'
+        ResolveOutsideNames = $false
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $settingsDir 'settings.json'), ($settings | ConvertTo-Json))
@@ -110,6 +152,10 @@ function Save-Shot([string]$name, [bool]$simple, [bool]$dark, [string]$tab) {
         if ($tab) {
             Select-Tab $hwnd $tab
             Start-Sleep -Seconds 4
+        }
+        if ($button) {
+            Invoke-Button $hwnd $button
+            Start-Sleep -Seconds $settle
         }
 
         [void][QnsNative]::SetForegroundWindow($hwnd)
@@ -135,8 +181,27 @@ function Save-Shot([string]$name, [bool]$simple, [bool]$dark, [string]$tab) {
 Save-Shot 'adapters'         $true  $false ''
 Save-Shot 'adapters-details' $false $false ''
 Save-Shot 'route-table'      $true  $false 'Route Table'
-Save-Shot 'firewall'         $true  $false 'Firewall'
 Save-Shot 'adapters-dark'    $true  $true  ''
+
+Start-FirewallLogging
+try {
+    # The hits panel counts what the log holds from the last five minutes.
+    Save-Shot 'firewall'      $true  $false 'Firewall'
+    Save-Shot 'firewall-log'  $true  $false 'Firewall' 'View log' 6
+    # Register now checks for up to 30 seconds before it writes its last line. A
+    # runner adapter with DNS registration off has no Register now link; the log is
+    # then shot as it is.
+    try {
+        Save-Shot 'activity-log' $false $false '' 'Register now' 40
+    }
+    catch {
+        Write-Warning "Register now unavailable ($_); capturing the activity log as it is."
+        Save-Shot 'activity-log' $false $false '' 'Log' 2
+    }
+}
+finally {
+    Stop-FirewallLogging
+}
 
 # The whole screen, for working out what went wrong when a shot comes back blank or
 # covered. Not used by the README.
