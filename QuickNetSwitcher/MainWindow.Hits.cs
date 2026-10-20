@@ -46,11 +46,26 @@ public partial class MainWindow
         FirewallList.ItemsSource as IEnumerable<FirewallViewModel> ?? Enumerable.Empty<FirewallViewModel>();
 
     // The interface and profile a hit came in under (NetworkMap explains how).
+    //
+    // The interface guess can name the wrong profile: Windows evaluates some traffic,
+    // such as multicast a service sends from every adapter's address, under another
+    // interface's profile. But logging is set per profile, so a line can only have
+    // been written by a profile that logs that kind of hit. When the guessed profile
+    // doesn't, and exactly one profile does, that one is the answer.
     private void Place(FirewallLogEntry entry)
     {
         var location = _networkMap.Locate(entry);
         entry.Interface = location?.Interface ?? "";
-        entry.Profile = location?.Profile ?? "";
+
+        var logging = FirewallProfiles
+            .Where(p => entry.IsDropped ? p.LogDropped : entry.IsAllowed ? p.LogAllowed : p.IsLogging)
+            .Select(p => p.ProfileKey)
+            .ToList();
+        var guess = location?.Profile ?? "";
+
+        entry.Profile = logging.Contains(guess) ? guess
+            : logging.Count == 1 ? logging[0]
+            : guess;
     }
 
     private async Task RefreshNetworkMapAsync()

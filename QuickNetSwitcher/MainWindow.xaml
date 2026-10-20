@@ -555,7 +555,7 @@
                                           ColumnHeaderStyle="{StaticResource RouteHeader}"
                                           CellStyle="{StaticResource GridCell}">
                                     <DataGrid.Columns>
-                                        <DataGridTemplateColumn Header="Source" Width="*" SortMemberPath="Address">
+                                        <DataGridTemplateColumn Header="Source" Width="1.3*" MinWidth="150" SortMemberPath="Address">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <StackPanel>
@@ -567,11 +567,11 @@
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>
-                                        <DataGridTextColumn Header="Dropped" Binding="{Binding Dropped}" Width="64" />
-                                        <DataGridTextColumn Header="Allowed" Binding="{Binding Allowed}" Width="64" />
-                                        <DataGridTextColumn Header="Profile" Binding="{Binding Profile}" Width="62" FontFamily="{StaticResource UiFont}" />
-                                        <DataGridTextColumn Header="Interface" Binding="{Binding Interface}" Width="80" FontFamily="{StaticResource UiFont}" />
-                                        <DataGridTextColumn Header="Ports" Binding="{Binding Ports}" Width="*" />
+                                        <DataGridTextColumn Header="Dropped" Binding="{Binding Dropped}" Width="Auto" MinWidth="64" />
+                                        <DataGridTextColumn Header="Allowed" Binding="{Binding Allowed}" Width="Auto" MinWidth="64" />
+                                        <DataGridTextColumn Header="Profile" Binding="{Binding Profile}" Width="Auto" MinWidth="64" FontFamily="{StaticResource UiFont}" />
+                                        <DataGridTextColumn Header="Interface" Binding="{Binding Interface}" Width="Auto" MinWidth="80" FontFamily="{StaticResource UiFont}" />
+                                        <DataGridTextColumn Header="Ports" Binding="{Binding Ports}" Width="*" MinWidth="100" />
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </Grid>
@@ -692,7 +692,7 @@
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
-                                    <DataGridTextColumn Binding="{Binding Interface}" Width="86" FontFamily="{StaticResource UiFont}">
+                                    <DataGridTextColumn Binding="{Binding Interface}" Width="Auto" MinWidth="90" FontFamily="{StaticResource UiFont}">
                                         <DataGridTextColumn.Header>
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="Interface" VerticalAlignment="Center" />
@@ -701,7 +701,7 @@
                                             </StackPanel>
                                         </DataGridTextColumn.Header>
                                     </DataGridTextColumn>
-                                    <DataGridTextColumn Binding="{Binding Profile}" Width="70" FontFamily="{StaticResource UiFont}">
+                                    <DataGridTextColumn Binding="{Binding Profile}" Width="Auto" MinWidth="70" FontFamily="{StaticResource UiFont}">
                                         <DataGridTextColumn.Header>
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="Profile" VerticalAlignment="Center" />
