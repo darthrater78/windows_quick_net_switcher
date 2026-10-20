@@ -6,7 +6,7 @@ A small Windows utility for switching network adapters and firewall profiles on 
 ![Windows](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-[GitHub](https://github.com/darthrater78/windows_quick_net_switcher) · [v1.3.1 release notes](https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.1)
+[GitHub](https://github.com/darthrater78/windows_quick_net_switcher) · [v1.4.0 release notes](https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.4.0)
 
 ## Features
 
@@ -381,7 +381,15 @@ the merge into the collection touches the UI thread.
 
 ## Version History
 
-### Unreleased
+### v1.4.0 — 2026-10-20
+- DNS registration: a "Register in DNS" box in each adapter's details shows and changes Windows' "Register this connection's addresses in DNS" setting. "Register now" re-registers the computer and checks the result — whether its name points at the adapter's address, the reverse record, and any DNS Client warnings in the System event log
+- Activity log above the footer, opened from the new "Log" link: DNS registration runs, logging changes and errors, with selectable text, Copy and Clear. It grows with the window and has a drag bar to resize it
+- Firewall logging: turn logging of dropped packets and allowed connections on or off per profile. Logging turned on in the app is turned off again when the app closes, or at the next launch if it didn't close cleanly
+- Firewall hits: a panel under the profiles shows the busiest sources in the last 5 minutes with dropped and allowed counts, profile, interface and ports, and each profile row shows the network it's in use on and its own counts
+- Firewall log viewer: newest first, following new lines live; sort by any column, filter from the Action, Proto, Interface and Profile headers or by address, port or name; names next to addresses (local ones always, outside ones when "Resolve names" is ticked); Copy all; and "Clear log file…" to empty the log
+- The window fits what it shows: it grows and shrinks with adapter details, the Firewall tab's hits and the activity log
+- Only one copy runs at a time: launching it again brings the running copy to the front
+- Security: the firewall log is read only from a local fixed drive with no link on its path, and cleared only in Windows' own firewall log folder; firewall profile names are checked against an allowlist before any `netsh` call; the single-instance names are restricted to Administrators and SYSTEM
 - Redesigned window, recorded in [`DESIGN.md`](DESIGN.md): one line per adapter with its status in words, address and a larger switch; click a row for its details, or tick "Show all details". The title block, toolbar card, drop shadows and striped route rows are gone, and the tabs are one segmented control
 - New accent setting: teal by default, or your Windows accent colour, green, or none. A Windows accent too pale to read is replaced rather than used
 - A status line, the GitHub and release-notes links, Refresh and Settings now sit in a footer that every view keeps. "Simple view" is replaced by "Show all details", and one-line rows are the default for new installs
@@ -461,4 +469,4 @@ https://github.com/darthrater78/windows_quick_net_switcher
 
 ## Release Notes
 
-https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.3.1
+https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.4.0
