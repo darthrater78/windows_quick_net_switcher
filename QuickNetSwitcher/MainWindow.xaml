@@ -653,8 +653,8 @@
                                       ColumnHeaderStyle="{StaticResource RouteHeader}"
                                       CellStyle="{StaticResource GridCell}">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="64" SortMemberPath="When" />
-                                    <DataGridTextColumn Binding="{Binding Action}" Width="78" FontFamily="{StaticResource UiFont}">
+                                    <DataGridTextColumn Header="Time" Binding="{Binding Time}" Width="Auto" MinWidth="80" SortMemberPath="When" />
+                                    <DataGridTextColumn Binding="{Binding Action}" Width="Auto" MinWidth="82" FontFamily="{StaticResource UiFont}">
                                         <DataGridTextColumn.Header>
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="Action" VerticalAlignment="Center" />
@@ -663,7 +663,7 @@
                                             </StackPanel>
                                         </DataGridTextColumn.Header>
                                     </DataGridTextColumn>
-                                    <DataGridTextColumn Binding="{Binding Protocol}" Width="62">
+                                    <DataGridTextColumn Binding="{Binding Protocol}" Width="Auto" MinWidth="74">
                                         <DataGridTextColumn.Header>
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="Proto" VerticalAlignment="Center" />

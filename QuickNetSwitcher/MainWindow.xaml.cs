@@ -321,6 +321,18 @@ public partial class MainWindow : Window
         UpdateWindowSizing(refit: true);
     }
 
+    // A window that fits its content grows downwards. When that would put its bottom
+    // under the taskbar it moves up instead, so the footer stays in view.
+    private void KeepOnScreen(SizeChangedEventArgs e)
+    {
+        if (!e.HeightChanged || e.NewSize.Height <= e.PreviousSize.Height
+            || WindowState != WindowState.Normal || _isPinnedToDesktop) return;
+
+        var area = SystemParameters.WorkArea;
+        if (Top + e.NewSize.Height > area.Bottom)
+            Top = Math.Max(area.Top, area.Bottom - e.NewSize.Height);
+    }
+
     // Remembers the height the user picked, so leaving simple view restores it.
     //
     // Mode switches resize the window too and come through here as well; capturing
@@ -330,6 +342,8 @@ public partial class MainWindow : Window
     // cramped list once there were more adapters than the shortened window could hold.
     private void Window_SizeChanged(object sender, SizeChangedEventArgs e)
     {
+        KeepOnScreen(e);
+
         if (_isAdjustingSize || SizeToContent != SizeToContent.Manual) return;
 
         // Remembered without the activity log, which adds its own height when open.
@@ -345,8 +359,13 @@ public partial class MainWindow : Window
     // The route table and the full firewall log are not measured this way: they would
     // size to every row they hold and snap the window to the full screen height. Those
     // views keep the height the user last gave them.
+    //
+    // At startup the tab control has not selected its first tab yet (index -1), and
+    // its selection change arrives before the window is loaded, when it is ignored. -1
+    // is the Adapters tab about to be shown -- reading it as "another tab" is what
+    // left the window at full height on launch.
     private bool FitsContent =>
-        MainTabs.SelectedIndex == 0 || (MainTabs.SelectedIndex == 2 && !IsFirewallLogOpen);
+        MainTabs.SelectedIndex <= 0 || (MainTabs.SelectedIndex == 2 && !IsFirewallLogOpen);
 
     // `refit` re-applies fitting even when the mode has not changed: a hand resize
     // switches WPF out of SizeToContent on its own, and opening the log or the details
