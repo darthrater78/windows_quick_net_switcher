@@ -276,7 +276,7 @@ public partial class MainWindow : Window
         foreach (var adapter in _adapters)
             adapter.SimpleView = simple;
 
-        UpdateWindowSizing();
+        UpdateWindowSizing(refit: true);
     }
 
     // Opens or closes one row's details. The handle, the switch and the metric link
@@ -316,6 +316,8 @@ public partial class MainWindow : Window
             _expandedIds.Add(adapter.AdapterId);
         else
             _expandedIds.Remove(adapter.AdapterId);
+
+        UpdateWindowSizing(refit: true);
     }
 
     // Remembers the height the user picked, so leaving simple view restores it.
@@ -329,23 +331,36 @@ public partial class MainWindow : Window
     {
         if (_isAdjustingSize || SizeToContent != SizeToContent.Manual) return;
 
+        // Remembered without the activity log, which adds its own height when open.
         if (e.HeightChanged && e.NewSize.Height > 0)
-            _detailViewHeight = e.NewSize.Height;
+            _detailViewHeight = e.NewSize.Height - (IsActivityOpen ? ActivityExtraHeight : 0);
     }
 
-    // The adapter list sits in a star-sized row, so the window holds its full height
-    // whatever the content needs. Simple view rows are a third as tall, which left a
-    // dead band of empty space below the last adapter; sizing to content removes it.
+    // The window fits what it shows: the adapter list (one line per adapter, or with
+    // every row's details open), and the firewall profiles with the hits panel at a
+    // fixed height below them. So it grows when details or the activity log open and
+    // shrinks back when they close.
     //
-    // Only the adapter list is measured this way. The route table would size to every
-    // row it holds and snap the window to the full screen height, so the other tabs
-    // keep the fixed height.
-    private void UpdateWindowSizing()
+    // The route table and the full firewall log are not measured this way: they would
+    // size to every row they hold and snap the window to the full screen height. Those
+    // views keep the height the user last gave them.
+    private bool FitsContent =>
+        MainTabs.SelectedIndex == 0 || (MainTabs.SelectedIndex == 2 && !IsFirewallLogOpen);
+
+    // `refit` re-applies fitting even when the mode has not changed: a hand resize
+    // switches WPF out of SizeToContent on its own, and opening the log or the details
+    // should still fit the window afterwards.
+    private void UpdateWindowSizing(bool refit = false)
     {
-        var fitToContent = ShowAllDetailsCheckBox.IsChecked != true && MainTabs.SelectedIndex == 0;
+        var fitToContent = FitsContent;
+        var fitting = SizeToContent == SizeToContent.Height;
 
         // Already in the right mode: leave the window exactly as the user left it.
-        if (fitToContent == (SizeToContent == SizeToContent.Height)) return;
+        if (fitToContent == fitting && !(refit && fitToContent))
+        {
+            ApplyActivityLayout();
+            return;
+        }
 
         _isAdjustingSize = true;
 
@@ -355,6 +370,8 @@ public partial class MainWindow : Window
             // MaxHeight has to be capped or a long adapter list grows past the screen.
             MinHeight = 0;
             MaxHeight = SystemParameters.WorkArea.Height;
+            if (fitting)
+                SizeToContent = SizeToContent.Manual;
             SizeToContent = SizeToContent.Height;
         }
         else
@@ -362,7 +379,7 @@ public partial class MainWindow : Window
             // Height is assigned before SizeToContent is released, so the first layout
             // pass already targets the restored size instead of settling at MinHeight
             // on the way there. All four assignments land before any layout runs.
-            Height = _detailViewHeight;
+            Height = ManualHeight();
             MinHeight = DetailViewMinHeight;
             MaxHeight = double.PositiveInfinity;
             SizeToContent = SizeToContent.Manual;

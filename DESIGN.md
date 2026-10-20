@@ -169,7 +169,11 @@ and the footer. Icons come from Segoe Fluent Icons (Segoe MDL2 Assets fallback).
 
 ## Layout
 
-Window 620×580, minimum 500×450, margin 14px sides and 10px top and bottom.
+Window 620 wide, margin 14px sides and 10px top and bottom. On the Adapters
+tab and the Firewall tab's profiles the window fits its content (hits panel
+300px, activity log 160px); the route table and the firewall log keep the
+user's height, 580 by default, minimum 500×450, plus 170px while the activity
+log is open.
 Top to bottom: segmented tabs, the tab's filters (10px above and below), the
 list, the footer. Rows are 54px minimum with 4px between them; row padding 7px
 vertical, 14px right. An adapter row reads handle (26px), name over status,

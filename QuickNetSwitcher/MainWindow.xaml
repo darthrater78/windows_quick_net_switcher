@@ -508,7 +508,7 @@
 
                     <!-- Hits: the busiest sources in the last few minutes, dropped and
                          allowed, with the profile and interface each came in under. -->
-                    <Border Grid.Row="1"
+                    <Border x:Name="HitsPanel" Grid.Row="1"
                             Margin="0,6,0,0"
                             Background="{DynamicResource CardBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"

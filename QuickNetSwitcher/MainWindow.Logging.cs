@@ -110,11 +110,35 @@ public partial class MainWindow
         }
     }
 
+    // What the activity log adds to the window's height when it opens.
+    private const double ActivityExtraHeight = 170;
+    private const double FitActivityHeight = 160;
+    private const double FitHitsHeight = 300;
+
+    private bool IsActivityOpen => ActivityPane.Visibility == Visibility.Visible;
+
+    // Opening the log makes room for it and closing it gives the room back: a fitted
+    // window refits; a hand-sized one grows or shrinks by the log's height.
     private void SetActivityVisible(bool show)
     {
+        if (show == IsActivityOpen) return;
         ActivityPane.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+
+        if (FitsContent)
+        {
+            UpdateWindowSizing(refit: true);
+            return;
+        }
+
+        _isAdjustingSize = true;
+        Height = ManualHeight();
         ApplyActivityLayout();
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _isAdjustingSize = false);
     }
+
+    private double ManualHeight() =>
+        Math.Min(SystemParameters.WorkArea.Height,
+            _detailViewHeight + (IsActivityOpen ? ActivityExtraHeight : 0));
 
     // The list and the log share the height in proportion (star rows), so the log
     // grows and shrinks with the window, and the splitter between them sets the
@@ -122,8 +146,11 @@ public partial class MainWindow
     // measure the log to its full length, so it takes a fixed height instead.
     private void ApplyActivityLayout()
     {
-        var show = ActivityPane.Visibility == Visibility.Visible;
+        var show = IsActivityOpen;
         var fit = SizeToContent == SizeToContent.Height;
+
+        // A fitted Firewall tab would otherwise grow and shrink with every hit.
+        HitsPanel.Height = fit ? FitHitsHeight : double.NaN;
 
         ActivitySplitter.Visibility = show && !fit ? Visibility.Visible : Visibility.Collapsed;
         ContentRow.MinHeight = fit ? 0 : 200;
@@ -133,7 +160,7 @@ public partial class MainWindow
         if (!show)
             ActivityRow.Height = new GridLength(0);
         else if (fit)
-            ActivityRow.Height = new GridLength(160);
+            ActivityRow.Height = new GridLength(FitActivityHeight);
         else if (!ActivityRow.Height.IsStar)
             ActivityRow.Height = new GridLength(1, GridUnitType.Star);
     }
@@ -276,6 +303,7 @@ public partial class MainWindow
         _firewallLog.Clear();
         FirewallMain.Visibility = Visibility.Collapsed;
         FirewallLogView.Visibility = Visibility.Visible;
+        UpdateWindowSizing();
         _ = ReadFirewallLogAsync();
         UpdateFirewallTailState();
     }
@@ -286,6 +314,7 @@ public partial class MainWindow
     {
         FirewallLogView.Visibility = Visibility.Collapsed;
         FirewallMain.Visibility = Visibility.Visible;
+        UpdateWindowSizing();
         _firewallTail = null;
         _firewallLog.Clear();
         UpdateFirewallTailState();

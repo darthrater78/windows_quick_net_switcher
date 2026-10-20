@@ -37,7 +37,7 @@ A small Windows utility for switching network adapters and firewall profiles on 
 **General**
 - System tray icon — minimize to tray and keep it running in the background
 - Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
-- The window shrinks to fit the adapter list rather than keeping its full height; "Show all details" restores the full-height view
+- The window fits what it shows: the adapter list grows and shrinks as rows' details open and close or "Show all details" is ticked, the Firewall tab fits the profiles and the hits panel, and opening the activity log makes room for it. The route table and the full firewall log keep the height you give them
 - Dark theme — follows the Windows app theme by default, with a toggle in the settings menu to override it. Both themes cover the window chrome, tabs, buttons, checkboxes, scrollbars, the route grid, the metric dialog, the title bar and the tray menu
 - Accent colour — teal by default; the settings menu also offers your Windows accent colour, green, or none. It colours switches that are on, the selected tab, ticked boxes, links and the tray icon
 - Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, hide-disconnected, show-all-details, the accent, and the theme once you pick one)
