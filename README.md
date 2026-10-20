@@ -229,7 +229,7 @@ Stated plainly rather than left for you to discover:
   `SetParent` to place this elevated window underneath a window owned by the
   unelevated desktop shell. It is an unusual arrangement; turn the setting off
   if you would rather not have it.
-- **One instance per user session.** A named mutex and event under `Local\`, with the user's SID in the name, keep a second copy from starting and bring the first to the front. A program running as the same user could create those names first and so keep the app from starting; such a program can already end the app, so they get no separate ACL.
+- **One instance per user session.** A named mutex and event under `Local\`, with the user's SID in the name, keep a second copy from starting and bring the first to the front. Both are created with an ACL that admits only Administrators and SYSTEM, so an unelevated program can't signal the app or hold the names. A name someone else created first is recognised by its owner not being Administrators or SYSTEM and ignored, so squatting it can't stop the app starting. On a machine whose policy makes the creating user, not Administrators, the owner of an elevated process's objects, the same check fails open: the app starts, and a second copy is possible.
 - **Firewall logging state is read from the registry.** The app reads the local
   firewall policy and Group Policy keys for each profile; a setting made by
   Group Policy is shown but can't be changed here.
