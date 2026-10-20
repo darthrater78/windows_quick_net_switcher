@@ -187,7 +187,9 @@ Start-FirewallLogging
 try {
     # The hits panel counts what the log holds from the last five minutes.
     Save-Shot 'firewall'      $true  $false 'Firewall'
-    Save-Shot 'firewall-log'  $true  $false 'Firewall' 'View log' 6
+    # The hits panel's link: UI Automation does not reach the View log links inside
+    # the profile rows.
+    Save-Shot 'firewall-log'  $true  $false 'Firewall' 'Open viewer' 6
     # Register now checks for up to 30 seconds before it writes its last line. A
     # runner adapter with DNS registration off has no Register now link; the log is
     # then shot as it is.
