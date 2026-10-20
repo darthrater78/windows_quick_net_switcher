@@ -112,7 +112,9 @@ public partial class MainWindow
 
     // What the activity log adds to the window's height when it opens.
     private const double ActivityExtraHeight = 170;
-    private const double FitActivityHeight = 160;
+    // The log's height while the window fits its content: 160 until the user drags
+    // the bar, then whatever they dragged it to.
+    private double _fitActivityHeight = 160;
     private const double FitHitsHeight = 300;
 
     private bool IsActivityOpen => ActivityPane.Visibility == Visibility.Visible;
@@ -152,7 +154,7 @@ public partial class MainWindow
         // A fitted Firewall tab would otherwise grow and shrink with every hit.
         HitsPanel.Height = fit ? FitHitsHeight : double.NaN;
 
-        ActivitySplitter.Visibility = show && !fit ? Visibility.Visible : Visibility.Collapsed;
+        ActivitySplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         ContentRow.MinHeight = fit ? 0 : 200;
         if (!ContentRow.Height.IsStar)
             ContentRow.Height = new GridLength(3, GridUnitType.Star);
@@ -160,9 +162,41 @@ public partial class MainWindow
         if (!show)
             ActivityRow.Height = new GridLength(0);
         else if (fit)
-            ActivityRow.Height = new GridLength(FitActivityHeight);
+            ActivityRow.Height = new GridLength(_fitActivityHeight);
         else if (!ActivityRow.Height.IsStar)
+        {
+            ContentRow.Height = new GridLength(3, GridUnitType.Star);
             ActivityRow.Height = new GridLength(1, GridUnitType.Star);
+        }
+    }
+
+    // A window sized to its content has no spare height to share, so grabbing the bar
+    // first freezes the window at its current size and turns the two rows into shares
+    // of it, as they are in a hand-sized window. Done before the drag starts, since
+    // the splitter reads the rows when it does. The next fit (log, details or tab)
+    // sizes the window to content again, with the log at the height dragged to.
+    private void ActivitySplitter_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (SizeToContent != SizeToContent.Height) return;
+
+        var content = ContentRow.ActualHeight;
+        var log = ActivityRow.ActualHeight;
+
+        _isAdjustingSize = true;
+        Height = ActualHeight;
+        MinHeight = Math.Min(ActualHeight, DetailViewMinHeight);
+        MaxHeight = double.PositiveInfinity;
+        SizeToContent = SizeToContent.Manual;
+        ContentRow.MinHeight = Math.Min(content, 120);
+        ContentRow.Height = new GridLength(content, GridUnitType.Star);
+        ActivityRow.Height = new GridLength(log, GridUnitType.Star);
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => _isAdjustingSize = false);
+    }
+
+    private void ActivitySplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        if (ActivityRow.ActualHeight > 0)
+            _fitActivityHeight = Math.Max(70, ActivityRow.ActualHeight);
     }
 
     private void CopyActivityLog_Click(object sender, RoutedEventArgs e) =>

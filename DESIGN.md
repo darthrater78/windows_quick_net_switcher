@@ -183,7 +183,8 @@ the status message at left; Log, GitHub, Release notes, Refresh, Settings at
 right. The activity log opens between the list and the footer and shares the
 height with the list 1:3 by default; a 10px drag bar (a 36×3px `control-outline`
 grip) between them changes the share, which holds as the window is resized.
-While the window fits itself to the adapter list the log is 160px instead.
+While the window fits its content the log is 160px, or the height the bar
+was last dragged to; dragging freezes the window at its size until the next fit.
 On the Firewall tab, the hits panel fills the space under the profile rows.
 Route grid and firewall log cells 10px × 6px, metric right-aligned.
 

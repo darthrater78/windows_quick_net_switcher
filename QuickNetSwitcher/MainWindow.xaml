@@ -733,6 +733,8 @@
                       Background="Transparent"
                       Cursor="SizeNS"
                       ToolTip="Drag to resize the activity log"
+                      PreviewMouseLeftButtonDown="ActivitySplitter_PreviewMouseLeftButtonDown"
+                      DragCompleted="ActivitySplitter_DragCompleted"
                       AutomationProperties.Name="Resize the activity log">
             <GridSplitter.Template>
                 <ControlTemplate TargetType="GridSplitter">
