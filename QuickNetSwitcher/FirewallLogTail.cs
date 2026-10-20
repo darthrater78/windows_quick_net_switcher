@@ -74,7 +74,8 @@ public sealed class FirewallLogTail
 
     public FirewallLogTail(string path) => _path = path;
 
-    public string FileName => Path.GetFileName(_path);
+    public string FileName => System.IO.Path.GetFileName(_path);
+    public string Path => _path;
 
     public TailResult ReadNew()
     {
@@ -128,7 +129,7 @@ public sealed class FirewallLogTail
         return new TailResult(entries, length, false, restarted);
     }
 
-    private static bool HasLinkOnPath(FileInfo file)
+    internal static bool HasLinkOnPath(FileInfo file)
     {
         if (file.Attributes.HasFlag(FileAttributes.ReparsePoint))
             return true;

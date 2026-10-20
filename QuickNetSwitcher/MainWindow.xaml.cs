@@ -80,6 +80,7 @@ public partial class MainWindow : Window
         _adapterView = CollectionViewSource.GetDefaultView(_adapters);
         _adapterView.Filter = IsAdapterVisible;
         InitLogging();
+        _ = TurnOffLeftoverLoggingAsync();
         _ = LoadAdaptersAsync();
         StartAdapterWatch();
 
@@ -480,7 +481,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowFromTray()
+    internal void ShowFromTray()
     {
         Show();
         WindowState = WindowState.Normal;

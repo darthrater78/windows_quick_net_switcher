@@ -59,8 +59,100 @@ public partial class MainWindow
     {
         _firewallTailTimer.Stop();
         _hitsTimer.Stop();
-        if (!_shutdown.IsCancellationRequested)
-            _shutdown.Cancel();
+        if (_shutdown.IsCancellationRequested) return;
+        _shutdown.Cancel();
+        TurnOffAppLogging(waitAtMost: TimeSpan.FromSeconds(6));
+    }
+
+    // Turns off the firewall logging this app turned on. At exit it waits a few seconds
+    // at most, so closing can't hang on netsh; anything left on stays listed in the
+    // settings and is turned off at the next launch.
+    private void TurnOffAppLogging(TimeSpan waitAtMost)
+    {
+        var entries = _settings.LoggingToTurnOff.ToList();
+        if (entries.Count == 0) return;
+
+        var work = Task.Run(() => TurnOff(entries));
+        if (!work.Wait(waitAtMost)) return;
+        Forget(work.Result);
+    }
+
+    // A previous session that didn't close cleanly can leave logging on.
+    private async Task TurnOffLeftoverLoggingAsync()
+    {
+        var entries = _settings.LoggingToTurnOff.ToList();
+        if (entries.Count == 0) return;
+
+        var done = await Task.Run(() => TurnOff(entries));
+        Forget(done);
+        if (done.Count > 0)
+            _activity.Append(LogLine.Info($"Firewall · turned off {done.Count} logging setting(s) left on by the last session"));
+    }
+
+    // Runs off the UI thread and touches nothing but netsh. Returns the entries dealt
+    // with: turned off, or not something this app could have written.
+    private static List<string> TurnOff(List<string> entries)
+    {
+        var done = new List<string>();
+        foreach (var entry in entries)
+        {
+            var parts = entry.Split('/');
+            var valid = parts.Length == 2 && FirewallLoggingService.IsKnownProfile(parts[0])
+                        && parts[1] is "dropped" or "allowed";
+            if (!valid || FirewallLoggingService.SetLogging(parts[0], parts[1] == "dropped", false))
+                done.Add(entry);
+        }
+        return done;
+    }
+
+    private void Forget(List<string> done)
+    {
+        foreach (var entry in done)
+            _settings.LoggingToTurnOff.Remove(entry);
+        SettingsService.Save(_settings);
+    }
+
+    // --- Clearing the log file ---
+
+    private async void ClearLogFile_Click(object sender, RoutedEventArgs e)
+    {
+        var path = _firewallTail?.Path;
+        if (path == null) return;
+
+        if (!FirewallLoggingService.CanClear(path))
+        {
+            ShowError("Only a log in Windows' firewall log folder can be cleared here");
+            return;
+        }
+
+        var answer = MessageBox.Show(this,
+            $"Empty {System.IO.Path.GetFileName(path)} and remove {System.IO.Path.GetFileName(path)}.old?\n\nEvery line Windows has logged so far is deleted. This can't be undone.",
+            "Clear firewall log", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+        if (answer != MessageBoxResult.Yes) return;
+
+        ClearLogFileButton.IsEnabled = false;
+        ShowStatus("Clearing the firewall log...");
+        try
+        {
+            var error = await Task.Run(() => FirewallLoggingService.ClearLog(path));
+            if (error != null)
+            {
+                ShowError($"Couldn't clear the log: {error}");
+                return;
+            }
+            _firewallLog.Clear();
+            _hits.Clear();
+            _activity.Append(LogLine.Info($"Firewall · cleared {System.IO.Path.GetFileName(path)}"));
+            ShowStatus("Firewall log cleared");
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Error: {ex.Message}");
+        }
+        finally
+        {
+            ClearLogFileButton.IsEnabled = true;
+        }
     }
 
     // --- Activity log ---
@@ -292,14 +384,23 @@ public partial class MainWindow
         var enable = box.IsChecked == true;
         var what = dropped ? "dropped packets" : "allowed connections";
         var key = profile.ProfileKey;
+        var entry = $"{key}/{(dropped ? "dropped" : "allowed")}";
         box.IsEnabled = false;
         ShowStatus($"{(enable ? "Turning on" : "Turning off")} logging of {what} for {key}...");
 
         try
         {
-            var success = await Task.Run(() => FirewallLoggingService.SetLogging(key, dropped, enable));
+            var success = await Task.Run(() =>
+                FirewallLoggingService.SetLogging(key, dropped, enable)
+                && FirewallLoggingService.WaitForLogging(key, dropped, enable));
             if (success)
             {
+                // Logging this app turned on is turned off again when it closes; logging
+                // the user turns off here is theirs to keep off.
+                _settings.LoggingToTurnOff.Remove(entry);
+                if (enable) _settings.LoggingToTurnOff.Add(entry);
+                SaveSettings();
+
                 _activity.Append(LogLine.Info($"Firewall · {key}: logging of {what} {(enable ? "on" : "off")}"));
                 ShowStatus($"{key} firewall: logging of {what} {(enable ? "on" : "off")}");
                 await LoadFirewallAsync();
@@ -335,6 +436,7 @@ public partial class MainWindow
     {
         _firewallTail = new FirewallLogTail(path);
         _firewallLog.Clear();
+        ClearLogFileButton.Visibility = FirewallLoggingService.CanClear(path) ? Visibility.Visible : Visibility.Collapsed;
         FirewallMain.Visibility = Visibility.Collapsed;
         FirewallLogView.Visibility = Visibility.Visible;
         UpdateWindowSizing();
@@ -441,8 +543,6 @@ public partial class MainWindow
     private bool IsFirewallEntryVisible(object item)
     {
         if (item is not FirewallLogEntry entry) return false;
-        if (entry.IsDropped && FwShowDropped.IsChecked != true) return false;
-        if (entry.IsAllowed && FwShowAllowed.IsChecked != true) return false;
         foreach (var (key, hidden) in _hiddenValues)
         {
             if (hidden.Contains(ColumnValue(entry, key))) return false;

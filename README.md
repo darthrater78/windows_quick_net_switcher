@@ -26,15 +26,16 @@ A small Windows utility for switching network adapters and firewall profiles on 
 
 **Firewall tab**
 - Toggle Windows Firewall on/off per profile (Domain, Private, Public)
-- Turn logging of dropped packets and allowed connections on or off per profile
+- Turn logging of dropped packets and allowed connections on or off per profile. Logging turned on in the app is turned off again when the app closes (or at the next launch, if it didn't close cleanly); logging that was already on is left alone
 - A hits panel under the profiles shows the busiest source addresses in the last 5 minutes, with how many of their packets were dropped and allowed, the profile and interface they came in under, and the ports they hit. Each profile row shows which network it is in use on and its own dropped/allowed counts. Clear starts the count again; every column sorts
-- View the firewall log in the app, newest first, following new lines as Windows writes them. Sort by any column, filter by action, protocol, interface or profile from the column headers, by dropped/allowed, or by address, port or name. "Copy all" copies every line shown; Ctrl+C copies the selected ones
+- View the firewall log in the app, whether or not logging is on now, newest first, following new lines as Windows writes them. Sort by any column, filter by action, protocol, interface or profile from the column headers, or by address, port or name. "Clear log file…" empties the log and removes its `.old` copy, after a confirmation. "Copy all" copies every line shown; Ctrl+C copies the selected ones
 - Names next to addresses: local-network addresses are looked up automatically; outside addresses only when "Resolve names" is ticked in the viewer. The address is always shown
 
 **Activity log**
 - A log above the footer, opened from its "Log" link, records DNS registration runs, logging changes and errors; highlight any part of it, or copy or clear it all. Drag the bar above it to resize; it keeps its share of the window as the window is resized
 
 **General**
+- One copy at a time: launching it again brings the running copy to the front
 - System tray icon — minimize to tray and keep it running in the background
 - Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
 - The window fits what it shows: the adapter list grows and shrinks as rows' details open and close or "Show all details" is ticked, the Firewall tab fits the profiles and the hits panel, and opening the activity log makes room for it. The route table and the full firewall log keep the height you give them
@@ -86,6 +87,7 @@ These operations are gated behind admin rights by Windows itself:
 | Turn DNS registration on/off | WMI `Win32_NetworkAdapterConfiguration.SetDynamicDNSRegistration` | Changes the adapter's TCP/IP configuration |
 | Register now | `ipconfig /registerdns` | Asks the DNS Client service to re-register every adapter |
 | Read the firewall log | Opens `pfirewall.log` read-only | The log folder is readable only by administrators |
+| Clear the firewall log | Truncates `pfirewall.log` and deletes `pfirewall.log.old`; if the firewall service refuses, pauses logging to it, truncates, and restores logging exactly as it was | The log folder is writable only by administrators |
 
 Everything else the app does — listing adapters, reading the route table,
 reading firewall state and logging settings, reading DNS Client events — is
@@ -141,6 +143,8 @@ Every value that reaches a privileged call is constrained before it gets there:
 | `netsh interface ipv4 set interface` | The metric dialog — the only free-text input in the app | Validated twice, in the dialog and again in the service: integer, 1–9999. The interface alias comes from WMI, not from typed input |
 | `netsh advfirewall set` | Firewall profile name | Checked against an allowlist of `Domain`, `Private`, `Public` in the service before any `netsh` call; never free text |
 | WMI `SetDynamicDNSRegistration` | Adapter `DeviceID`, from WMI | Parsed as an unsigned integer before it is placed in the WQL query. The "use this connection's DNS suffix" flag is read and written back unchanged |
+| Clearing `pfirewall.log` | The log path, validated as for reading | Additionally refused unless the file is in `%windir%\System32\LogFiles\Firewall`, a folder only administrators can change, so an elevated truncate can't be pointed at another file through a user-writable folder. Asks for confirmation first |
+| Turning logging off at close or launch | `settings.json`, which the user (and so any program running as them) can edit | Entries are checked against the profile allowlist and are only ever used to turn logging **off**, so an edited file cannot turn any logging on |
 | `wevtutil qe System` | A time stamp the app generates | The event query is built only from the run's own start time, formatted invariantly |
 | Reading `pfirewall.log` | The log path, from firewall policy (the registry) | Read unexpanded, then only `%systemroot%`/`%windir%` are expanded, from the Windows directory rather than the environment. Refused unless it resolves to a file on a local fixed drive: no UNC or device path, no mapped network drive, and no symbolic link on the file or any folder above it — an elevated read of a network path would send this account's credentials to that server. Opened read-only and shared, for one read at a time |
 
@@ -225,6 +229,7 @@ Stated plainly rather than left for you to discover:
   `SetParent` to place this elevated window underneath a window owned by the
   unelevated desktop shell. It is an unusual arrangement; turn the setting off
   if you would rather not have it.
+- **One instance per user session.** A named mutex and event under `Local\`, with the user's SID in the name, keep a second copy from starting and bring the first to the front. A program running as the same user could create those names first and so keep the app from starting; such a program can already end the app, so they get no separate ACL.
 - **Firewall logging state is read from the registry.** The app reads the local
   firewall policy and Group Policy keys for each profile; a setting made by
   Group Policy is shown but can't be changed here.

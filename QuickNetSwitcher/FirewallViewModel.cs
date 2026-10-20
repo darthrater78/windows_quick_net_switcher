@@ -22,7 +22,9 @@ public class FirewallViewModel : INotifyPropertyChanged
     public int LogMaxSizeKb { get; set; }
 
     public bool IsLogging => LogDropped || LogAllowed;
-    public bool CanViewLog => IsLogging && LogFile != null;
+    // The viewer opens whether or not logging is on: the file keeps what was logged.
+    public bool CanViewLog => LogFile != null;
+    public bool IsLoggingToFile => IsLogging && LogFile != null;
     public bool LogPathRefused => IsLogging && LogFile == null;
     // Which networks Windows has put under this profile, and its hits in the hits
     // panel's window. Both change while the row is on screen.

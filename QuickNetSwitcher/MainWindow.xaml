@@ -458,6 +458,7 @@
                                                           VerticalAlignment="Center"
                                                           Margin="0,4,16,4"
                                                           IsChecked="{Binding LogDropped, Mode=OneWay}"
+                                                          ToolTip="Logging turned on here is turned off again when Quick Net Switcher closes"
                                                           IsEnabled="{Binding CanChangeLogging}"
                                                           Tag="{Binding}"
                                                           Click="LogDropped_Click" />
@@ -465,6 +466,7 @@
                                                           VerticalAlignment="Center"
                                                           Margin="0,4,16,4"
                                                           IsChecked="{Binding LogAllowed, Mode=OneWay}"
+                                                          ToolTip="Logging turned on here is turned off again when Quick Net Switcher closes"
                                                           IsEnabled="{Binding CanChangeLogging}"
                                                           Tag="{Binding}"
                                                           Click="LogAllowed_Click" />
@@ -490,7 +492,7 @@
                                                 <TextBlock Style="{StaticResource DetailText}"
                                                            FontFamily="{StaticResource UiFont}"
                                                            Text="{Binding HitsText}"
-                                                           Visibility="{Binding CanViewLog, Converter={StaticResource BoolToVis}}" />
+                                                           Visibility="{Binding IsLoggingToFile, Converter={StaticResource BoolToVis}}" />
                                             </WrapPanel>
                                         </Border>
                                     </Grid>
@@ -594,12 +596,6 @@
                                     Padding="0,4"
                                     Margin="0,0,16,0"
                                     Click="CloseFirewallLog_Click" />
-                            <CheckBox x:Name="FwShowDropped" DockPanel.Dock="Left" Content="Dropped" IsChecked="True"
-                                      VerticalAlignment="Center" Margin="0,0,16,0"
-                                      Checked="FirewallLogFilter_Changed" Unchecked="FirewallLogFilter_Changed" />
-                            <CheckBox x:Name="FwShowAllowed" DockPanel.Dock="Left" Content="Allowed" IsChecked="True"
-                                      VerticalAlignment="Center" Margin="0,0,16,0"
-                                      Checked="FirewallLogFilter_Changed" Unchecked="FirewallLogFilter_Changed" />
                             <CheckBox x:Name="FwResolveNames" DockPanel.Dock="Left" Content="Resolve names"
                                       VerticalAlignment="Center" Margin="0,0,16,0"
                                       ToolTip="Also look up names for outside addresses. Local addresses are always looked up. A lookup can tell an address's owner that it was noticed."
@@ -608,6 +604,14 @@
                                       VerticalAlignment="Center"
                                       ToolTip="Add new lines as Windows writes them. Windows writes the log in batches, so a line can arrive a few seconds late."
                                       Checked="FirewallFollow_Changed" Unchecked="FirewallFollow_Changed" />
+                            <Button x:Name="ClearLogFileButton" DockPanel.Dock="Right"
+                                    Style="{StaticResource LinkButton}"
+                                    Content="Clear log file…"
+                                    ToolTip="Empty the firewall log file and remove its .old copy. This can't be undone."
+                                    FontSize="12"
+                                    Padding="0,4"
+                                    Margin="10,0,0,0"
+                                    Click="ClearLogFile_Click" />
                             <Button DockPanel.Dock="Right"
                                     Style="{StaticResource LinkButton}"
                                     Content="Copy all"

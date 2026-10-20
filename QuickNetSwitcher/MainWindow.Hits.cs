@@ -107,7 +107,7 @@ public partial class MainWindow
     {
         if (_hitsInFlight || IsFirewallLogOpen) return;
 
-        var paths = FirewallProfiles.Where(p => p.CanViewLog).Select(p => p.LogFile!)
+        var paths = FirewallProfiles.Where(p => p.IsLoggingToFile).Select(p => p.LogFile!)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         HitsEmpty.Visibility = paths.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         HitsGrid.Visibility = paths.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -138,11 +138,23 @@ public partial class MainWindow
         {
             // The window is closing.
         }
+        catch (Exception ex)
+        {
+            // Never silently: a failure here used to leave the panel frozen. Start the
+            // file readers afresh, and say what happened once rather than every tick.
+            _hitsTails.Clear();
+            var message = $"Firewall hits: {ex.Message}";
+            if (message != _lastHitsError)
+                ShowError(message);
+            _lastHitsError = message;
+        }
         finally
         {
             _hitsInFlight = false;
         }
     }
+
+    private string? _lastHitsError;
 
     private static (List<FirewallLogEntry>, string?) ReadAll(List<FirewallLogTail> tails)
     {
@@ -219,7 +231,7 @@ public partial class MainWindow
         if (path != null)
             OpenFirewallLog(path);
         else
-            ShowStatus("Turn on logging for a profile first");
+            ShowError("The firewall log isn't on a local drive, so it isn't opened here");
     }
 
     // Outside addresses are looked up only while this is ticked; local ones always are.

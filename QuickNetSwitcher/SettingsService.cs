@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -22,6 +23,11 @@ public class AppSettings
     // Look up names for outside addresses in the firewall log viewer. Off by default:
     // a reverse lookup can tell the owner of an address that it was noticed.
     public bool ResolveOutsideNames { get; set; } = false;
+
+    // Firewall logging this app turned on ("Domain/dropped"), turned off again when it
+    // closes -- or on the next launch, if it did not close cleanly. Entries are only
+    // ever used to turn logging off, so an edited file can't turn anything on.
+    public List<string> LoggingToTurnOff { get; set; } = new();
 
     // One of ThemeService.Accents; anything else is treated as the default.
     public string Accent { get; set; } = ThemeService.DefaultAccent;

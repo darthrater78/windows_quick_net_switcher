@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Microsoft.Win32;
 
@@ -74,6 +75,108 @@ public static class FirewallLoggingService
 
         return result is { ExitCode: 0 }
                && !result.Output.Contains("Error", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static readonly string DefaultLogFolder =
+        Path.Combine(SystemPaths.WindowsDir, "System32", "LogFiles", "Firewall");
+
+    // Emptying a file with administrator rights is riskier than reading one: a path
+    // redirected through a user-writable folder could empty a system file instead. So
+    // only a log in Windows' own firewall log folder, which only administrators can
+    // change, is ever cleared.
+    public static bool CanClear(string path) =>
+        string.Equals(Path.GetDirectoryName(path), DefaultLogFolder, StringComparison.OrdinalIgnoreCase);
+
+    // Empties the log and removes its .old copy. Null on success, else why not.
+    //
+    // The firewall service may hold the log open in a way that refuses a truncate; then
+    // logging to it is paused, the file emptied, and logging put back exactly as it was.
+    public static string? ClearLog(string path)
+    {
+        if (!CanClear(path))
+            return "only a log in Windows' firewall log folder can be cleared";
+
+        var old = path + ".old";
+        foreach (var file in new[] { path, old })
+        {
+            var info = new FileInfo(file);
+            if (info.Exists && FirewallLogTail.HasLinkOnPath(info))
+                return "the log path goes through a link";
+        }
+
+        if (!TryTruncate(path))
+        {
+            var paused = PauseLoggingTo(path);
+            try
+            {
+                if (!TryTruncate(path))
+                    return "the firewall service is still using the file";
+            }
+            finally
+            {
+                foreach (var (profile, dropped) in paused)
+                    SetLogging(profile, dropped, true);
+            }
+        }
+
+        try
+        {
+            if (File.Exists(old)) File.Delete(old);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"the log was cleared, but {Path.GetFileName(old)} could not be removed: {ex.Message}";
+        }
+        return null;
+    }
+
+    private static bool TryTruncate(string path)
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            try
+            {
+                if (!File.Exists(path)) return true;
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Write,
+                    FileShare.ReadWrite | FileShare.Delete);
+                stream.SetLength(0);
+                return true;
+            }
+            catch (IOException)
+            {
+                System.Threading.Thread.Sleep(200);
+            }
+        }
+        return false;
+    }
+
+    private static List<(string Profile, bool Dropped)> PauseLoggingTo(string path)
+    {
+        var paused = new List<(string, bool)>();
+        foreach (var profile in new[] { "Domain", "Private", "Public" })
+        {
+            var now = Read(profile);
+            if (!string.Equals(now.FilePath, path, StringComparison.OrdinalIgnoreCase)) continue;
+            if (now.LogDropped && SetLogging(profile, true, false)) paused.Add((profile, true));
+            if (now.LogAllowed && SetLogging(profile, false, false)) paused.Add((profile, false));
+        }
+        foreach (var (profile, dropped) in paused)
+            WaitForLogging(profile, dropped, false);
+        return paused;
+    }
+
+    // netsh returns before the change is visible in the registry, so a read straight
+    // after it can still show the old value. Waits up to 3 seconds for the new one.
+    public static bool WaitForLogging(string profileName, bool dropped, bool enabled)
+    {
+        for (var i = 0; i < 15; i++)
+        {
+            var now = Read(profileName);
+            if ((dropped ? now.LogDropped : now.LogAllowed) == enabled)
+                return true;
+            System.Threading.Thread.Sleep(200);
+        }
+        return false;
     }
 
     // The log path comes from firewall policy, which this app does not control, and the

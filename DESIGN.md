@@ -227,6 +227,9 @@ checkbox boxes. Switches are 52×28 and fully round, with an 18px thumb.
 - **Addresses in a grid:** the address on the first line in the data font, its
   name under it in 12px UI font, `text-secondary`. The address is never
   replaced by the name.
+- **Log viewer filter row:** ← Profiles, Resolve names, Follow new lines at
+  left; the address filter, Copy all and Clear log file… at right. Dropped and
+  Allowed are filtered from the Action header, not separate boxes.
 - **Header filter:** a 10px funnel glyph after a column name, `text-secondary`;
   `accent` while that column hides any value. It opens a checklist of the
   column's values.
