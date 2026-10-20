@@ -396,13 +396,13 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Height is assigned before SizeToContent is released, so the first layout
-            // pass already targets the restored size instead of settling at MinHeight
-            // on the way there. All four assignments land before any layout runs.
-            Height = ManualHeight();
+            // SizeToContent is released first: while it is set, WPF ignores Height, and
+            // releasing it afterwards kept the fitted size, clamped to MinHeight -- the
+            // route table opened at the minimum instead of the remembered height.
+            SizeToContent = SizeToContent.Manual;
             MinHeight = DetailViewMinHeight;
             MaxHeight = double.PositiveInfinity;
-            SizeToContent = SizeToContent.Manual;
+            Height = ManualHeight();
         }
 
         ApplyActivityLayout();
