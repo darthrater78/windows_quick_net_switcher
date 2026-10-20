@@ -273,7 +273,9 @@
                                     <UniformGrid Rows="1" IsItemsHost="True" />
                                 </Border>
 
-                                <ContentPresenter Grid.Row="1" ContentSource="SelectedContent" />
+                                <!-- PART_SelectedContentHost is the name UI Automation looks for: without
+                                     it the selected tab's content is invisible to screen readers. -->
+                                <ContentPresenter x:Name="PART_SelectedContentHost" Grid.Row="1" ContentSource="SelectedContent" />
                             </Grid>
                         </ControlTemplate>
                     </Setter.Value>
