@@ -159,6 +159,8 @@ function Save-Shot([string]$name, [bool]$simple, [bool]$dark, [string]$tab,
         }
 
         [void][QnsNative]::SetForegroundWindow($hwnd)
+        # Off the window, so no hover state or tooltip lands in the shot.
+        [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(0, 0)
         Start-Sleep -Milliseconds 800
 
         $rect = Get-WindowBounds $hwnd
