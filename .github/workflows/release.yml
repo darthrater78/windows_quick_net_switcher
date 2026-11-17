@@ -51,7 +51,8 @@ jobs:
             echo "::error::Could not read the version from the csproj or app.manifest. Refusing to publish."
             exit 1
           fi
-          if [ "v$csproj" != "$GITHUB_REF_NAME" ] || [ "v$manifest" != "$GITHUB_REF_NAME" ]; then
+          # The manifest holds numbers only, so a same-day -2 is compared without it.
+          if [ "v$csproj" != "$GITHUB_REF_NAME" ] || [ "v$manifest" != "${GITHUB_REF_NAME%%-*}" ]; then
             echo "::error::Tag $GITHUB_REF_NAME is on a commit that declares csproj $csproj, manifest $manifest. Merge the release first, then tag the merged commit."
             exit 1
           fi

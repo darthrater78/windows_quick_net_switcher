@@ -1,0 +1,217 @@
+<Window x:Class="QuickNetSwitcher.IpSettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="IP settings"
+        Width="440" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{DynamicResource SurfaceBrush}"
+        FontFamily="{StaticResource UiFont}"
+        FontSize="13">
+    <Window.Resources>
+        <!-- DHCP / Static: the same segmented look as the main tabs, one choice filled. -->
+        <Style x:Key="SegmentStyle" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <!-- Tag carries the corner radius, so the filled half follows the
+                         outline's rounded corners on its own side only. -->
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{DynamicResource ControlBorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"
+                                Padding="6">
+                            <ContentPresenter HorizontalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AccentFillBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="DataBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="FontFamily" Value="{StaticResource DataFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="0,0,0,7" />
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="20,14,20,18">
+        <TextBlock x:Name="AdapterLabel"
+                   FontSize="16" FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextPrimaryBrush}"
+                   TextTrimming="CharacterEllipsis" />
+
+        <!-- Preset: picking one fills the fields below; nothing is applied until Apply. -->
+        <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="110" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Preset" Style="{StaticResource FieldLabel}" />
+            <Button x:Name="PresetPicker" Grid.Column="1"
+                    HorizontalContentAlignment="Stretch"
+                    ToolTip="Fill the fields from a saved preset"
+                    Click="PresetPicker_Click">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Text="&#xE70D;"
+                               FontFamily="{StaticResource IconFont}" FontSize="10"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBlock x:Name="PresetPickerText" Text="Current settings"
+                               TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+                <Button.ContextMenu>
+                    <ContextMenu x:Name="PresetMenu" />
+                </Button.ContextMenu>
+            </Button>
+            <Button x:Name="DeletePresetButton" Grid.Column="2"
+                    Style="{StaticResource LinkButton}"
+                    Content="Delete" FontSize="12"
+                    Margin="10,0,0,0"
+                    ToolTip="Delete this preset"
+                    Visibility="Collapsed"
+                    Click="DeletePreset_Click" />
+        </Grid>
+
+        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,12" />
+
+        <Border BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1"
+                CornerRadius="6">
+            <UniformGrid Columns="2">
+                <RadioButton x:Name="DhcpRadio" GroupName="Source"
+                             Style="{StaticResource SegmentStyle}"
+                             Content="Automatic (DHCP)"
+                             Checked="Source_Changed">
+                    <RadioButton.Tag><CornerRadius>5,0,0,5</CornerRadius></RadioButton.Tag>
+                </RadioButton>
+                <RadioButton x:Name="StaticRadio" GroupName="Source"
+                             Style="{StaticResource SegmentStyle}"
+                             Content="Static"
+                             BorderThickness="1,0,0,0"
+                             Checked="Source_Changed">
+                    <RadioButton.Tag><CornerRadius>0,5,5,0</CornerRadius></RadioButton.Tag>
+                </RadioButton>
+            </UniformGrid>
+        </Border>
+
+        <Grid Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="110" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition /><RowDefinition /><RowDefinition />
+            </Grid.RowDefinitions>
+            <TextBlock Text="IP address" Style="{StaticResource FieldLabel}" Margin="0,0,0,7" />
+            <TextBox x:Name="AddressInput" Grid.Column="1" Style="{StaticResource DataBox}"
+                     AutomationProperties.Name="IP address" />
+            <TextBlock Grid.Row="1" Text="Subnet prefix" Style="{StaticResource FieldLabel}" Margin="0,0,0,7" />
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                <TextBox x:Name="PrefixInput" Width="52" Style="{StaticResource DataBox}"
+                         AutomationProperties.Name="Subnet prefix length"
+                         TextChanged="Prefix_TextChanged" />
+                <TextBlock x:Name="MaskText" Margin="10,0,0,7" VerticalAlignment="Center"
+                           FontFamily="{StaticResource DataFont}" FontSize="12"
+                           Foreground="{DynamicResource TextSecondaryBrush}" />
+            </StackPanel>
+            <TextBlock Grid.Row="2" Text="Gateway" Style="{StaticResource FieldLabel}" Margin="0,0,0,7" />
+            <TextBox x:Name="GatewayInput" Grid.Row="2" Grid.Column="1" Style="{StaticResource DataBox}"
+                     AutomationProperties.Name="Gateway"
+                     ToolTip="Leave empty for no gateway" />
+        </Grid>
+
+        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Margin="0,5,0,10" />
+
+        <DockPanel>
+            <CheckBox x:Name="DnsAutoCheck" DockPanel.Dock="Right"
+                      Content="Get automatically" FontSize="12"
+                      VerticalAlignment="Center"
+                      Click="DnsAuto_Click" />
+            <TextBlock Text="DNS servers" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimaryBrush}" />
+        </DockPanel>
+
+        <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="110" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition /><RowDefinition />
+            </Grid.RowDefinitions>
+            <TextBlock Text="Preferred" Style="{StaticResource FieldLabel}" Margin="0,0,0,7" />
+            <TextBox x:Name="Dns1Input" Grid.Column="1" Style="{StaticResource DataBox}"
+                     AutomationProperties.Name="Preferred DNS server" />
+            <TextBlock Grid.Row="1" Text="Alternate" Style="{StaticResource FieldLabel}" Margin="0,0,0,7" />
+            <TextBox x:Name="Dns2Input" Grid.Row="1" Grid.Column="1" Style="{StaticResource DataBox}"
+                     AutomationProperties.Name="Alternate DNS server" />
+        </Grid>
+
+        <TextBlock x:Name="MultiAddressText"
+                   FontSize="12" TextWrapping="Wrap"
+                   Foreground="{DynamicResource TextSecondaryBrush}"
+                   Visibility="Collapsed" />
+
+        <TextBlock x:Name="ErrorText"
+                   FontSize="12" TextWrapping="Wrap"
+                   Foreground="{DynamicResource ErrorBrush}"
+                   Margin="0,4,0,0"
+                   Visibility="Collapsed" />
+
+        <!-- Save as preset: a name field in place, not a second window. -->
+        <Grid x:Name="SavePanel" Margin="0,10,0,0" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="110" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Preset name" Style="{StaticResource FieldLabel}" />
+            <TextBox x:Name="PresetNameInput" Grid.Column="1"
+                     AutomationProperties.Name="Preset name"
+                     MaxLength="40" />
+            <Button Grid.Column="2" Content="Save" Margin="7,0,0,0" Click="SavePreset_Click" />
+        </Grid>
+
+        <DockPanel Margin="0,16,0,0">
+            <Button x:Name="SaveAsLink" DockPanel.Dock="Left"
+                    Style="{StaticResource LinkButton}"
+                    Content="Save as preset…" FontSize="12"
+                    VerticalAlignment="Center"
+                    Click="SaveAs_Click" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Cancel" Margin="0,0,8,0" IsCancel="True" />
+                <Button Content="Apply"
+                        Style="{StaticResource PrimaryButton}"
+                        IsDefault="True"
+                        Click="Apply_Click" />
+            </StackPanel>
+        </DockPanel>
+
+        <TextBlock Text="Applying can drop this connection for a few seconds. You'll be asked to keep the new settings; if you don't answer, the old ones come back."
+                   FontSize="12" TextWrapping="Wrap" Margin="0,10,0,0"
+                   Foreground="{DynamicResource TextSecondaryBrush}" />
+    </StackPanel>
+</Window>

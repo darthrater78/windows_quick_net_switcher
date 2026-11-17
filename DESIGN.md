@@ -205,7 +205,29 @@ checkbox boxes. Switches are 52×28 and fully round, with an 18px thumb.
   thumb; on is filled with the accent. 50% opacity while Windows applies it.
 - **Row:** click or Enter/Space opens its details; hover is `hover`; keyboard
   focus is a 2px accent outline. Dragging is by the handle only: the row
-  follows at 60% opacity and a 2px accent bar marks where it lands.
+  follows at 60% opacity and a 2px accent bar marks where it lands. Rows are
+  grouped connected, then not connected, then disabled, and move between
+  groups on their own when their state changes; dragging reorders within a
+  group only.
+- **Preset tag:** on a row's first line, after "Preset:" in `text-secondary`:
+  the matching preset's name (or DHCP, or Custom) and a 9px caret, in a 1px
+  dashed `control-outline` box, 6px radius, at most 140px with an ellipsis.
+  Dashed because it is a picker, not an action; it opens a menu of DHCP, the
+  presets (the current one ticked), then Edit IP settings… and Save current
+  as preset…. An outlined Edit button follows it.
+- **ZTNA tag:** in the preset tag's place on a tunnel adapter: solid 1px
+  `text-primary` outline, a lock glyph and "ZTNA" in 12px semibold. A label,
+  not a control; no Edit button beside it.
+- **IP settings dialog:** 440px, sized to content. Preset picker with Delete;
+  Automatic (DHCP) / Static as a segmented control; labelled fields in a 110px
+  label column, values in the data font; DNS servers under their own heading
+  with "Get automatically". Save as preset… is a link that opens a name row in
+  place. Cancel and one filled Apply; under them, in 12px `text-secondary`,
+  the warning that applying can drop the connection and will be undone unless
+  kept.
+- **Keep dialog:** 380px. "Keep these settings?" in 16px semibold, the change
+  in words, a countdown line in 12px `text-secondary`; Revert now (outlined,
+  also Esc) and Keep (filled). No answer reverts.
 - **Tabs:** one control across the window; selected segment filled.
 - **Buttons:** outlined by default; one filled button (Apply); underlined
   links; 28px icon buttons. Hover and pressed lay an 8% and 16% wash over the

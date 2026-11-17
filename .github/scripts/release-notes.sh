@@ -9,7 +9,7 @@
 #   REPO_URL  base repository URL, e.g. https://github.com/owner/repo
 set -euo pipefail
 
-TAG="${1:?tag required, e.g. v1.3.0}"
+TAG="${1:?tag required, e.g. v2026.11.17}"
 OUT="${2:?output file required}"
 REPO_URL="${REPO_URL:?REPO_URL required}"
 
@@ -18,9 +18,10 @@ BODY="$(mktemp)"
 trap 'rm -f "$BODY"' EXIT
 
 # Everything between this version's "### vX.Y.Z" heading and the next one. The
-# trailing guard stops v1.3.0 from matching a v1.3.01 heading.
+# trailing guard stops v1.3.0 from matching a v1.3.01 heading, and v2026.11.17
+# from matching the v2026.11.17-2 heading above it.
 awk -v ver="$VERSION" '
-  $0 ~ "^### v" ver "([^0-9.]|$)" { found = 1; next }
+  $0 ~ "^### v" ver "([^0-9.-]|$)" { found = 1; next }
   found && /^### v/ { exit }
   found { print }
 ' README.md > "$BODY"

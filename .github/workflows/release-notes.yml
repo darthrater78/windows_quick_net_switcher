@@ -35,8 +35,9 @@ jobs:
       - name: Validate tag
         run: |
           set -euo pipefail
-          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::'$TAG' is not a release tag like v1.3.0."
+          # Date versions, with -2, -3 for a second release on the same day.
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]; then
+            echo "::error::'$TAG' is not a release tag like v2026.11.17 or v2026.11.17-2."
             exit 1
           fi
 

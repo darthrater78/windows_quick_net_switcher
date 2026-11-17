@@ -77,6 +77,42 @@ public static class FirewallLoggingService
                && !result.Output.Contains("Error", StringComparison.OrdinalIgnoreCase);
     }
 
+    // Logging switched on can leave the firewall service writing nowhere until Windows
+    // restarts: the setting is on, and the file never appears. Setting the log's filename
+    // again, to the value it already has, can make the service open it; failing that, the
+    // same for its maximum size. Nothing else is touched: no service is restarted and no
+    // profile changed. Only a path ResolveLogPath accepted is passed back to netsh, and a
+    // profile whose logging comes from Group Policy is left alone (netsh writes the local
+    // setting, which policy overrides). True when the file exists afterwards.
+    public static bool NudgeLog(string profileName)
+    {
+        var profile = Profile(profileName);
+        if (profile == null) return false;
+
+        var now = Read(profileName);
+        if (now.FilePath is not { } path || now.SetByPolicy || !(now.LogDropped || now.LogAllowed))
+            return false;
+        if (File.Exists(path)) return true;
+
+        var set = new[] { "advfirewall", "set", profile.Value.Netsh, "logging" };
+        NetshRunner.Run([.. set, "filename", now.RawPath.Trim().Trim('"')]);
+        if (WaitForFile(path, 5)) return true;
+
+        if (now.MaxSizeKb is < 1 or > 32767) return false;
+        NetshRunner.Run([.. set, "maxfilesize", now.MaxSizeKb.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+        return WaitForFile(path, 5);
+    }
+
+    private static bool WaitForFile(string path, int seconds)
+    {
+        for (var i = 0; i < seconds * 4; i++)
+        {
+            if (File.Exists(path)) return true;
+            System.Threading.Thread.Sleep(250);
+        }
+        return File.Exists(path);
+    }
+
     private static readonly string DefaultLogFolder =
         Path.Combine(SystemPaths.WindowsDir, "System32", "LogFiles", "Firewall");
 

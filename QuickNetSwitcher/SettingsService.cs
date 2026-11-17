@@ -31,6 +31,10 @@ public class AppSettings
 
     // One of ThemeService.Accents; anything else is treated as the default.
     public string Accent { get; set; } = ThemeService.DefaultAccent;
+
+    // Named IPv4 settings the user can apply to any adapter. Plain text: addresses,
+    // gateways and DNS servers are not secrets (user's call, 2026-10-31).
+    public List<IpPreset> IpPresets { get; set; } = new();
 }
 
 public static class SettingsService
@@ -45,7 +49,9 @@ public static class SettingsService
         {
             if (!File.Exists(SettingsFile)) return new();
             var json = File.ReadAllText(SettingsFile);
-            return JsonSerializer.Deserialize<AppSettings>(json) ?? new();
+            var settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new();
+            settings.IpPresets = CleanPresets(settings.IpPresets);
+            return settings;
         }
         // A missing, unreadable or corrupt file starts from defaults rather than
         // stopping the app.
@@ -53,6 +59,24 @@ public static class SettingsService
         {
             return new();
         }
+    }
+
+    // Applying a preset runs netsh elevated, so a preset read from the file must pass
+    // the same checks as one typed into the dialog. Anything else is dropped, as are
+    // duplicate names and any past the limit.
+    private static List<IpPreset> CleanPresets(List<IpPreset>? presets)
+    {
+        var kept = new List<IpPreset>();
+        foreach (var p in presets ?? new())
+        {
+            if (p == null) continue;
+            p.Name = (p.Name ?? "").Trim();
+            if (IpSettingsService.ValidateName(p.Name, kept) != null) continue;
+            if (kept.Exists(k => string.Equals(k.Name, p.Name, StringComparison.OrdinalIgnoreCase))) continue;
+            if (IpSettingsService.Validate(p.ToConfig()) != null) continue;
+            kept.Add(IpPreset.From(p.Name, p.ToConfig()));
+        }
+        return kept;
     }
 
     public static bool Save(AppSettings settings)

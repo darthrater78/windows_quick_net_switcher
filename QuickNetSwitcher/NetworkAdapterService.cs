@@ -21,7 +21,12 @@ public record AdapterInfo(
     string DefaultGateway,
     int InterfaceMetric,
     string DnsSuffix,
-    bool RegistersInDns);
+    bool RegistersInDns,
+    bool RegistersSuffix,
+    bool DhcpEnabled,
+    bool DnsIsStatic,
+    IReadOnlyList<string> DnsServers,
+    int Ipv4Count);
 
 public static class NetworkAdapterService
 {
@@ -29,9 +34,9 @@ public static class NetworkAdapterService
     {
         var adapters = new List<AdapterInfo>();
 
-        var configMap = new Dictionary<string, (string Ip, string Cidr, string Gateway, int Metric, string DnsSuffix, bool RegistersInDns)>();
+        var configMap = new Dictionary<string, NetConfig>();
         using (var cfgSearcher = new ManagementObjectSearcher(
-            "SELECT Index, IPAddress, IPSubnet, DefaultIPGateway, IPConnectionMetric, DNSDomain, FullDNSRegistrationEnabled FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = True"))
+            "SELECT Index, IPAddress, IPSubnet, DefaultIPGateway, IPConnectionMetric, DNSDomain, FullDNSRegistrationEnabled, DomainDNSRegistrationEnabled, DHCPEnabled, DNSServerSearchOrder, SettingID FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = True"))
         {
             foreach (ManagementObject cfg in cfgSearcher.Get())
             {
@@ -46,13 +51,28 @@ public static class NetworkAdapterService
                 if (string.IsNullOrEmpty(index) || ips is not { Length: > 0 })
                     continue;
 
-                var ip = ips[0];
+                // IPAddress mixes IPv4 and IPv6, with IPSubnet at the same positions.
+                // Everything this app edits is IPv4, so it shows the first IPv4 address
+                // and counts the rest, rather than whichever family Windows lists first.
+                var v4 = Enumerable.Range(0, ips.Length)
+                    .Where(i => IpSettingsService.TryParseIpv4(ips[i], out _))
+                    .ToList();
+                var at = v4.Count > 0 ? v4[0] : 0;
+                var ip = ips[at];
                 var cidr = "";
-                if (subnets is { Length: > 0 })
-                    cidr = $"/{MaskToCidr(subnets[0])}";
-                var gateway = gateways is { Length: > 0 } ? gateways[0] : "";
+                if (subnets is { } s && at < s.Length)
+                    cidr = $"/{MaskToCidr(s[at])}";
+                var gateway = gateways?.FirstOrDefault(g => IpSettingsService.TryParseIpv4(g, out _)) ?? "";
 
-                configMap[index] = (ip, cidr, gateway, metric, dnsSuffix, registersInDns);
+                var dns = (cfg["DNSServerSearchOrder"] as string[] ?? Array.Empty<string>())
+                    .Where(d => IpSettingsService.TryParseIpv4(d, out _))
+                    .ToList();
+
+                configMap[index] = new NetConfig(ip, cidr, gateway, metric, dnsSuffix, registersInDns,
+                    cfg["DomainDNSRegistrationEnabled"] is true,
+                    cfg["DHCPEnabled"] is true,
+                    HasStaticDns(cfg["SettingID"]?.ToString()),
+                    dns, v4.Count);
             }
         }
 
@@ -119,6 +139,7 @@ public static class NetworkAdapterService
             }
 
             configMap.TryGetValue(adapterId, out var netConfig);
+            netConfig ??= NetConfig.None;
 
             var dnsSuffix = netConfig.DnsSuffix ?? "";
             if (string.IsNullOrEmpty(dnsSuffix))
@@ -133,7 +154,8 @@ public static class NetworkAdapterService
                 name, description, adapterId, interfaceIndex, adapterType,
                 isEnabled, status, speed, mac,
                 netConfig.Ip ?? "", netConfig.Cidr ?? "", netConfig.Gateway ?? "",
-                netConfig.Metric, dnsSuffix, netConfig.RegistersInDns));
+                netConfig.Metric, dnsSuffix, netConfig.RegistersInDns, netConfig.RegistersSuffix,
+                netConfig.Dhcp, netConfig.DnsIsStatic, netConfig.Dns, netConfig.Ipv4Count));
         }
 
         return adapters.OrderBy(a => a.Name).ToList();
@@ -216,6 +238,34 @@ public static class NetworkAdapterService
         }
 
         return false;
+    }
+
+    private record NetConfig(string Ip, string Cidr, string Gateway, int Metric, string DnsSuffix,
+        bool RegistersInDns, bool RegistersSuffix, bool Dhcp, bool DnsIsStatic,
+        IReadOnlyList<string> Dns, int Ipv4Count)
+    {
+        public static readonly NetConfig None =
+            new("", "", "", 0, "", false, false, false, false, Array.Empty<string>(), 0);
+    }
+
+    // WMI reports the DNS servers in use but not where they came from. Windows keeps
+    // servers set by hand in the interface's NameServer value and DHCP-supplied ones in
+    // DhcpNameServer, so a non-empty NameServer is what "set by hand" means. SettingID
+    // is parsed as a GUID before it goes into the key path.
+    private static bool HasStaticDns(string settingId)
+    {
+        if (!Guid.TryParse(settingId, out var guid))
+            return false;
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                $@"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{guid:B}");
+            return key?.GetValue("NameServer") is string ns && ns.Trim().Length > 0;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or System.IO.IOException)
+        {
+            return false;
+        }
     }
 
     private static int MaskToCidr(string mask)

@@ -46,6 +46,17 @@ public partial class MainWindow
         _firewallLogView = CollectionViewSource.GetDefaultView(_firewallLog);
         _firewallLogView.Filter = IsFirewallEntryVisible;
 
+        // Names, interface and profile can arrive after a line is added (reverse DNS
+        // runs in the background). Without live filtering a search by name never saw
+        // them, so a matching line stayed hidden.
+        if (_firewallLogView is ICollectionViewLiveShaping live && live.CanChangeLiveFiltering)
+        {
+            foreach (var property in new[] { nameof(FirewallLogEntry.SourceName), nameof(FirewallLogEntry.DestName),
+                         nameof(FirewallLogEntry.Interface), nameof(FirewallLogEntry.Profile) })
+                live.LiveFilteringProperties.Add(property);
+            live.IsLiveFiltering = true;
+        }
+
         _firewallTailTimer.Tick += (_, _) => _ = ReadFirewallLogAsync();
         IsVisibleChanged += (_, _) => UpdateFirewallTailState();
 
@@ -241,7 +252,7 @@ public partial class MainWindow
     private void ApplyActivityLayout()
     {
         var show = IsActivityOpen;
-        var fit = SizeToContent == SizeToContent.Height;
+        var fit = SizeToContent != SizeToContent.Manual;
 
         // A fitted Firewall tab would otherwise grow and shrink with every hit.
         HitsPanel.Height = fit ? FitHitsHeight : double.NaN;
@@ -269,12 +280,15 @@ public partial class MainWindow
     // sizes the window to content again, with the log at the height dragged to.
     private void ActivitySplitter_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (SizeToContent != SizeToContent.Height) return;
+        if (SizeToContent == SizeToContent.Manual) return;
 
         var content = ContentRow.ActualHeight;
         var log = ActivityRow.ActualHeight;
 
         _isAdjustingSize = true;
+        Width = ActualWidth;
+        MinWidth = Math.Min(ActualWidth, 500);
+        MaxWidth = double.PositiveInfinity;
         Height = ActualHeight;
         MinHeight = Math.Min(ActualHeight, DetailViewMinHeight);
         MaxHeight = double.PositiveInfinity;
@@ -403,6 +417,7 @@ public partial class MainWindow
 
                 _activity.Append(LogLine.Info($"Firewall · {key}: logging of {what} {(enable ? "on" : "off")}"));
                 ShowStatus($"{key} firewall: logging of {what} {(enable ? "on" : "off")}");
+                if (enable) await NudgeLogAsync(key);
                 await LoadFirewallAsync();
             }
             else
@@ -419,6 +434,48 @@ public partial class MainWindow
         finally
         {
             box.IsEnabled = true;
+        }
+    }
+
+    // Profiles nudged this session: once each is enough, whether it worked or not.
+    private readonly HashSet<string> _nudgedProfiles = new();
+
+    // When a profile logs to a file that doesn't exist, asks the firewall service to open
+    // it (FirewallLoggingService.NudgeLog) instead of leaving a restart as the only way.
+    private async Task NudgeLogAsync(string key)
+    {
+        if (!_nudgedProfiles.Add(key)) return;
+
+        var logging = await Task.Run(() => FirewallLoggingService.Read(key));
+        if (logging.FilePath is not { } path || logging.SetByPolicy || File.Exists(path)) return;
+
+        var file = Path.GetFileName(path);
+        ShowStatus($"{key} firewall: {file} doesn't exist yet; asking Windows to start it...");
+        var started = await Task.Run(() => FirewallLoggingService.NudgeLog(key));
+        if (started)
+        {
+            _activity.Append(LogLine.Info($"Firewall · {key}: {file} started"));
+            ShowStatus($"{key} firewall: {file} started");
+        }
+        else
+        {
+            _activity.Append(LogLine.Info($"Firewall · {key}: {file} still doesn't exist after asking Windows to start it"));
+            ShowStatus($"{key} firewall: {file} doesn't exist yet. Windows creates it when it logs a packet; if it's still missing later, restarting Windows starts it");
+        }
+    }
+
+    // Once per session, from the Firewall tab's load: a log that was never started
+    // before this app ran gets the same nudge as one just switched on.
+    private async Task NudgeMissingLogsAsync(IEnumerable<FirewallViewModel> profiles)
+    {
+        try
+        {
+            foreach (var profile in profiles.Where(p => p.IsLoggingToFile && !File.Exists(p.LogFile)).ToList())
+                await NudgeLogAsync(profile.ProfileKey);
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Error: {ex.Message}");
         }
     }
 
@@ -507,10 +564,15 @@ public partial class MainWindow
                 ShowStatus($"No {tail.FileName} yet; Windows creates it when it first logs a packet");
                 return;
             }
-            if (result.Restarted)
+            // After a skip the rows on screen and the new ones no longer join up, so
+            // start over from the newest lines rather than show a silent gap.
+            if (result.Restarted || result.Skipped)
                 _firewallLog.Clear();
 
-            if (_networkMapAt == DateTime.MinValue)
+            // Kept current while the viewer is open, as the hits panel does; built once,
+            // it went stale after a network change and left Interface and Profile blank,
+            // which a column filter then hid.
+            if (DateTime.Now - _networkMapAt > NetworkMapAge)
                 await RefreshNetworkMapAsync();
 
             // Newest first: the file's last line goes to the top.
@@ -524,7 +586,8 @@ public partial class MainWindow
             while (_firewallLog.Count > MaxFirewallLogRows)
                 _firewallLog.RemoveAt(_firewallLog.Count - 1);
 
-            ShowStatus($"Newest {_firewallLog.Count} lines  ·  {tail.FileName} {result.FileSize / 1024.0 / 1024.0:0.0} MB");
+            var skippedNote = result.Skipped ? "  ·  jumped ahead; older lines skipped while not following" : "";
+            ShowStatus($"Newest {_firewallLog.Count} lines  ·  {tail.FileName} {result.FileSize / 1024.0 / 1024.0:0.0} MB{skippedNote}");
         }
         catch (OperationCanceledException)
         {
