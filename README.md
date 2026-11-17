@@ -6,15 +6,18 @@ A small Windows utility for switching network adapters and firewall profiles on 
 ![Windows](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-[GitHub](https://github.com/darthrater78/windows_quick_net_switcher) · [v1.4.0 release notes](https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.4.0)
+[GitHub](https://github.com/darthrater78/windows_quick_net_switcher) · [v2026.11.17 release notes](https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v2026.11.17)
 
 ## Features
 
 **Adapters tab**
-- View all physical network adapters with status and IP/CIDR on one line each. Click an adapter for its gateway, interface metric, speed, MAC address, DNS suffix and device name, or tick "Show all details" to open every row
+- View all physical network adapters with status and IP/CIDR on one line each. Click an adapter for its gateway, interface metric, speed, MAC address, DNS suffix and device name; Expand all and Collapse all open or close every row
 - The list keeps itself current: Windows announces network changes and the app reacts to them, so dropping off Wi-Fi or unplugging a cable shows up on its own, with a 10-second check behind that as a backstop
+- Adapters are grouped connected, then not connected, then disabled, and move between groups on their own as their state changes
 - Toggle adapters on/off with a single click
-- Drag-to-reorder the adapter list by its handle, with a translucent ghost of the whole row following the pointer and a bar marking where it will land — order is remembered between launches
+- Drag-to-reorder adapters within their group by the handle, with a translucent ghost of the whole row following the pointer and a bar marking where it will land — order is remembered between launches
+- Set an adapter's IPv4 address, subnet prefix, gateway and up to two DNS servers, static or from DHCP, with Edit on the row. The Preset tag on the row applies DHCP or a saved preset in one click, and shows which one the adapter matches now. Presets are saved from the same dialog
+- Every IP change asks to be kept: unless Keep is pressed within 15 seconds, the previous settings come back, so a change that cuts the machine off undoes itself. ZTNA tunnel adapters are marked and can't be changed
 - Hide disconnected adapters, to cut the list down to the ones actually carrying a network
 - Edit an adapter's interface metric (1–9999) by clicking the metric in its details
 - Turn "Register this connection's addresses in DNS" on or off from an adapter's details; the box shows what Windows has set
@@ -26,9 +29,9 @@ A small Windows utility for switching network adapters and firewall profiles on 
 
 **Firewall tab**
 - Toggle Windows Firewall on/off per profile (Domain, Private, Public)
-- Turn logging of dropped packets and allowed connections on or off per profile. Logging turned on in the app is turned off again when the app closes (or at the next launch, if it didn't close cleanly); logging that was already on is left alone
-- A hits panel under the profiles shows the busiest source addresses in the last 5 minutes, with how many of their packets were dropped and allowed, the profile and interface they came in under, and the ports they hit. Each profile row shows which network it is in use on and its own dropped/allowed counts. Clear starts the count again; every column sorts
-- View the firewall log in the app, whether or not logging is on now, newest first, following new lines as Windows writes them. Sort by any column, filter by action, protocol, interface or profile from the column headers, or by address, port or name. "Clear log file…" empties the log and removes its `.old` copy, after a confirmation. "Copy all" copies every line shown; Ctrl+C copies the selected ones
+- Turn logging of dropped packets and allowed connections on or off per profile. Logging turned on in the app is turned off again when the app closes (or at the next launch, if it didn't close cleanly); logging that was already on is left alone. When logging is on but Windows hasn't created the log file, the app asks Windows to start it (once per profile each session) instead of leaving a restart as the only way
+- A hits panel under the profiles shows the busiest source addresses in the last 5 minutes, with how many of their packets were dropped and allowed, the profile and interface they came in under, and the ports they hit. Each profile row shows which network it is in use on and its own dropped/allowed counts. Clear starts the count again; every column sorts. An empty panel says why: no log file yet, or the newest line is older than the window
+- View the firewall log in the app, whether or not logging is on now, newest first, following new lines as Windows writes them. Sort by any column, filter by action, protocol, interface or profile from the column headers, or by address, port or name, including names that resolve after a line arrives. "Clear log file…" empties the log and removes its `.old` copy, after a confirmation. "Copy all" copies every line shown; Ctrl+C copies the selected ones
 - Names next to addresses: local-network addresses are looked up automatically; outside addresses only when "Resolve names" is ticked in the viewer. The address is always shown
 
 **Activity log**
@@ -38,13 +41,13 @@ A small Windows utility for switching network adapters and firewall profiles on 
 - One copy at a time: launching it again brings the running copy to the front
 - System tray icon — minimize to tray and keep it running in the background
 - Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
-- The window fits what it shows: the adapter list grows and shrinks as rows' details open and close or "Show all details" is ticked, the Firewall tab fits the profiles and the hits panel, and opening the activity log makes room for it. The route table and the full firewall log keep the height you give them
+- The window fits what it shows: the adapter list grows and shrinks as rows' details open and close or Expand all is used, the Firewall tab fits the profiles and the hits panel, and opening the activity log makes room for it. The route table and the full firewall log keep the height you give them
 - Dark theme — follows the Windows app theme by default, with a toggle in the settings menu to override it. Both themes cover the window chrome, tabs, buttons, checkboxes, scrollbars, the route grid, the metric dialog, the title bar and the tray menu
 - Accent colour — teal by default; the settings menu also offers your Windows accent colour, green, or none. It colours switches that are on, the selected tab, ticked boxes, links and the tray icon
-- Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, hide-disconnected, show-all-details, the accent, and the theme once you pick one)
+- Settings are persisted between sessions (minimize-to-tray, pin-to-desktop, hide-disconnected, whether rows open expanded, the accent, the theme once you pick one, and IP presets)
 - Custom app icon, and a look recorded in [`DESIGN.md`](DESIGN.md)
 - Links to the project on GitHub and to the running version's release notes, in the footer of every view
-- Runs as administrator (required to enable/disable adapters and change firewall/metric settings)
+- Runs as administrator (required to enable/disable adapters and change IP, firewall and metric settings)
 - Single-file self-contained executable — no .NET runtime install needed
 
 ## Screenshots
@@ -53,8 +56,8 @@ Captured from a real build on a GitHub Windows runner by the repository's
 Screenshots workflow, so the adapters, addresses, routes and firewall hits
 shown are that runner's.
 
-<img src="docs/screenshots/adapters.png" width="606" alt="Adapters tab: two adapters, each on one line with its status, address and switch" />
-<img src="docs/screenshots/adapters-details.png" width="606" alt="Adapters tab with Show all details ticked: gateway, metric, Register in DNS with Register now, speed, MAC address, DNS suffix and device name under each adapter" />
+<img src="docs/screenshots/adapters.png" width="606" alt="Adapters tab: two adapters, each on one line with its status, address, Preset tag and switch" />
+<img src="docs/screenshots/adapters-details.png" width="606" alt="Adapters tab with every row expanded: IP, subnet, gateway, DNS, the Preset tag and Edit, metric, Register in DNS with Register now, speed, MAC address, DNS suffix and device name under each adapter" />
 <img src="docs/screenshots/route-table.png" width="606" alt="Route Table tab: destination, gateway, interface, metric and type, with filters by route type" />
 <img src="docs/screenshots/firewall.png" width="606" alt="Firewall tab: Domain, Private and Public profiles with their logging boxes, the network each is in use on and its hits, and the top sources panel below" />
 <img src="docs/screenshots/firewall-log.png" width="606" alt="Firewall log viewer: newest lines first with time, action, protocol, source and destination with names, interface and profile, and filters in the column headers" />
@@ -297,14 +300,14 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 - **DNS registration:** The checkbox reads `FullDNSRegistrationEnabled` from `Win32_NetworkAdapterConfiguration` and writes it with `SetDynamicDNSRegistration`. "Register now" runs `ipconfig /registerdns`, then queries `HOST.<primary suffix>` (or the connection's suffix) with `DnsQuery` using the network only, bypassing the cache and hosts file, every 3 seconds for up to 30 seconds, checks the reverse record, and reads DNS Client warnings from the System log with `wevtutil`.
 - **Closing:** Background work — the DNS check and the log viewer — is tied to one cancellation token and timer that closing the window or exiting from the tray stops. The log file is open only for the moment of each read, and helpers have time limits, so nothing can hold the app open.
 - **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
-- **Simple view:** A flag on each `AdapterViewModel` hides the row's detail line, leaving the name, the status in words, the address and the switch. It is on by default; "Show all details" turns it off. Clicking a row sets a second flag, `IsExpanded`, that opens just that row; the window remembers which rows are open by adapter id, because a full reload rebuilds the view models. On the Adapters tab, in either view, and on the Firewall tab's profiles the window uses `SizeToContent="Height"`, so it fits what it shows and refits when details or the activity log open or close; a window that grows moves up to stay above the taskbar. The route table and the firewall log viewer would measure to every row they hold, so they use the height the user last gave them instead.
+- **Simple view:** A flag on each `AdapterViewModel` hides the row's detail line, leaving the name, the status in words, the address and the switch. It is on for every row; no row opens on its own. Clicking a row sets a second flag, `IsExpanded`, that opens just that row, and Expand all / Collapse all set it on every row and remember the choice (as `SimpleView` in settings) for the next launch; the window remembers which rows are open by adapter id, because a full reload rebuilds the view models. On the Adapters tab, in either view, and on the Firewall tab's profiles the window uses `SizeToContent="Height"`, so it fits what it shows and refits when details or the activity log open or close; a window that grows moves up to stay above the taskbar. The route table and the firewall log viewer would measure to every row they hold, so they use the height the user last gave them instead.
 - **Hide disconnected:** A filter on the adapter list's `ICollectionView`, so hidden adapters stay in the underlying collection and the saved display order keeps its full set. A filter is not re-evaluated when an item's own properties change, so the view is refreshed explicitly after a status update — otherwise an adapter that had just dropped its link would sit there until the list was rebuilt. Disabled adapters are never filtered out — switching one back on is what the app is for, and hiding it would put the row you just toggled off out of reach. The count of what the filter removed is shown on the checkbox itself, since the status line carrying it is overwritten by the next action.
 - **Reorder ghost:** Dragging a row's handle adds a `DragGhostAdorner` to the list's adorner layer, painting a translucent `VisualBrush` copy of the whole row that tracks the pointer, plus a 2px bar on the edge the row will take up. WPF supplies no drag visual of its own beyond the cursor.
 - **Theming:** Two `ResourceDictionary` palettes (`Themes/Light.xaml`, `Themes/Dark.xaml`) define the same key set, and `ThemeService` swaps one for the other in slot 0 of the application's merged dictionaries. Every colour is referenced with `DynamicResource`, so the swap propagates without rebuilding any window. The default comes from `AppsUseLightTheme` under `HKCU\...\Themes\Personalize`; clicking the toggle stores an explicit choice that stops following Windows. The title bar is darkened separately through `DwmSetWindowAttribute`, since the caption is drawn by the OS rather than WPF, and the tray menu and tray icon are coloured by hand from the same brushes because Windows Forms sits outside WPF's resource system.
 - **Accent:** Each palette defines the named accents as colours (`AccentTealColor` and so on); `ThemeService` writes the chosen one into three brushes in the application's own dictionary, which is searched before the merged palette, and rewrites them on every theme change. "Match Windows" reads `AccentColor` under `HKCU\SOFTWARE\Microsoft\Windows\DWM` when the theme or accent is applied. Because that colour is whatever the user set, it is checked against the WCAG ratios first: one below 3:1 against the row colour is replaced by the text colour, and one below 4.5:1 is not used for link text.
-- **Settings:** Minimize-to-tray, pin-to-desktop, the theme and the accent sit behind the gear in the footer, since they are set once and left alone; hide-disconnected and show-all-details stay under the tabs, because they change what you are looking at. All of them are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
+- **Settings:** Minimize-to-tray, pin-to-desktop, the theme and the accent sit behind the gear in the footer, since they are set once and left alone; hide-disconnected and Expand all / Collapse all stay under the tabs, because they change what you are looking at. All of them are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
 - **Links:** The GitHub and release-notes links sit in the footer beside the status line, which every view keeps. URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
-- The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, metric, and firewall changes all require it.
+- The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, IP, metric, and firewall changes all require it.
 
 ## Architecture
 
@@ -321,7 +324,10 @@ QuickNetSwitcher.sln
     ├── MainWindow.xaml(.cs)        The single window: three tabs, tray icon, all event handling
     ├── MainWindow.Logging.cs       Activity log, Register now, firewall logging and log viewer
     ├── MainWindow.Hits.cs          The Firewall tab's hits panel
+    ├── MainWindow.IpSettings.cs    IP settings: preset menu, apply, keep or revert
     ├── MetricDialog.xaml(.cs)      Modal dialog for editing an interface metric
+    ├── IpSettingsDialog.xaml(.cs)  Address, gateway, DNS and preset editing
+    ├── KeepSettingsDialog.xaml(.cs) 15-second keep-or-revert countdown after an IP change
     │
     ├── NetworkAdapterService.cs    WMI adapter discovery; enable/disable; metric via netsh
     ├── RouteTableService.cs        WMI route table query and interface-name resolution
@@ -332,6 +338,7 @@ QuickNetSwitcher.sln
     ├── DnsLookup.cs                DnsQuery interop, network only
     ├── ProcessRunner.cs            Starts helpers by absolute path, with a time limit
     ├── NetshRunner.cs              netsh through ProcessRunner
+    ├── IpSettingsService.cs        IPv4 validation and netsh address/DNS changes
     ├── ActivityLog.cs              The activity log's lines, capped at 1,000
     ├── FirewallHits.cs             The last 5 minutes of hits, counted by profile and source
     ├── NetworkMap.cs               Which adapter and profile each address belongs to
@@ -393,6 +400,14 @@ the merge into the collection touches the UI thread.
   [Download Size](#download-size)).
 
 ## Version History
+
+### v2026.11.17 — 2026-11-17
+- **Breaking (building from source only):** the project targets .NET 10 LTS, so building it needs the .NET 10 SDK. The exe still carries its own runtime and needs nothing installed. .NET 8, which v1.4.0 bundles, went out of support on 2026-11-10
+- Versions are now the release date (`2026.11.17`, then `2026.11.17-2` for a second release that day) instead of 1.x numbers
+- IP settings: set an adapter's IPv4 address, subnet, gateway and DNS servers, static or DHCP, from Edit on the row, or apply DHCP or a saved preset from the row's Preset tag. Every change reverts on its own unless kept within 15 seconds. ZTNA tunnel adapters are refused
+- Adapters are grouped connected / not connected / disabled and move between groups as their state changes; Expand all and Collapse all replace "Show all details"
+- Firewall log: when logging is on but the log file was never created, the app asks Windows to start it instead of needing a restart. The hits panel says why it is empty, and the log viewer's name filter catches names resolved after a line arrived
+- The CI build artifact is the bare exe, not a zip
 
 ### v1.4.0 — 2026-10-20
 - DNS registration: a "Register in DNS" box in each adapter's details shows and changes Windows' "Register this connection's addresses in DNS" setting. "Register now" re-registers the computer and checks the result — whether its name points at the adapter's address, the reverse record, and any DNS Client warnings in the System event log
@@ -482,4 +497,4 @@ https://github.com/darthrater78/windows_quick_net_switcher
 
 ## Release Notes
 
-https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v1.4.0
+https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v2026.11.17

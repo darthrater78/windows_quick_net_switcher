@@ -32,10 +32,14 @@ public partial class MainWindow : Window
     {
         get
         {
-            var version = Assembly.GetExecutingAssembly().GetName().Version;
-            return version is null
+            // The informational version is the csproj <Version> as written, so a
+            // second release on one day keeps its -2; the SDK appends "+<commit>".
+            var version = Assembly.GetExecutingAssembly()
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+                .Split('+')[0];
+            return string.IsNullOrEmpty(version)
                 ? $"{RepositoryUrl}/releases"
-                : $"{RepositoryUrl}/releases/tag/v{version.Major}.{version.Minor}.{version.Build}";
+                : $"{RepositoryUrl}/releases/tag/v{Uri.EscapeDataString(version)}";
         }
     }
 
