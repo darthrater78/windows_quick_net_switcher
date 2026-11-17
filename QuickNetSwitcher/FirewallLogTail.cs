@@ -53,7 +53,10 @@ public sealed class FirewallLogEntry : INotifyPropertyChanged
     }
 }
 
-public record TailResult(List<FirewallLogEntry> NewEntries, long FileSize, bool Missing, bool Restarted);
+// Skipped: more had piled up since the last read than is read at once, so the read
+// jumped ahead to the newest lines and those in between were never seen.
+public record TailResult(List<FirewallLogEntry> NewEntries, long FileSize, bool Missing, bool Restarted,
+    bool Skipped = false);
 
 // Reads pfirewall.log a piece at a time, picking up only what Windows has added since
 // the last read.
@@ -98,7 +101,8 @@ public sealed class FirewallLogTail
         // file shorter than where the last read stopped, means that happened.
         var restarted = _position >= 0 && (info.CreationTimeUtc != _created || length < _position);
         var skipFirstLine = false;
-        if (_position < 0 || restarted || length - _position > MaxReadBytes)
+        var skipped = _position >= 0 && !restarted && length - _position > MaxReadBytes;
+        if (_position < 0 || restarted || skipped)
         {
             _position = Math.Max(0, length - StartBytes);
             _partial = "";
@@ -108,7 +112,7 @@ public sealed class FirewallLogTail
 
         var count = (int)(length - _position);
         if (count <= 0)
-            return new TailResult(entries, length, false, restarted);
+            return new TailResult(entries, length, false, restarted, skipped);
 
         var buffer = new byte[count];
         stream.Seek(_position, SeekOrigin.Begin);
@@ -126,7 +130,7 @@ public sealed class FirewallLogTail
                 entries.Add(entry);
         }
 
-        return new TailResult(entries, length, false, restarted);
+        return new TailResult(entries, length, false, restarted, skipped);
     }
 
     internal static bool HasLinkOnPath(FileInfo file)

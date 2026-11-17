@@ -205,7 +205,10 @@ checkbox boxes. Switches are 52×28 and fully round, with an 18px thumb.
   thumb; on is filled with the accent. 50% opacity while Windows applies it.
 - **Row:** click or Enter/Space opens its details; hover is `hover`; keyboard
   focus is a 2px accent outline. Dragging is by the handle only: the row
-  follows at 60% opacity and a 2px accent bar marks where it lands.
+  follows at 60% opacity and a 2px accent bar marks where it lands. Rows are
+  grouped connected, then not connected, then disabled, and move between
+  groups on their own when their state changes; dragging reorders within a
+  group only.
 - **Tabs:** one control across the window; selected segment filled.
 - **Buttons:** outlined by default; one filled button (Apply); underlined
   links; 28px icon buttons. Hover and pressed lay an 8% and 16% wash over the

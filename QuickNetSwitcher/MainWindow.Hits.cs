@@ -128,9 +128,14 @@ public partial class MainWindow
             if (DateTime.Now - _networkMapAt > NetworkMapAge)
                 await RefreshNetworkMapAsync();
 
-            var (entries, error) = await Task.Run(() => ReadAll(tails), _shutdown.Token);
+            var (entries, error, missing) = await Task.Run(() => ReadAll(tails), _shutdown.Token);
+            _missingLogs = missing;
             foreach (var entry in entries)
+            {
                 Place(entry);
+                if (_newestLogLine is not { } newest || entry.When > newest)
+                    _newestLogLine = entry.When;
+            }
             _hits.Add(entries);
             UpdateHitsView(error);
         }
@@ -143,6 +148,7 @@ public partial class MainWindow
             // Never silently: a failure here used to leave the panel frozen. Start the
             // file readers afresh, and say what happened once rather than every tick.
             _hitsTails.Clear();
+            _newestLogLine = null;
             var message = $"Firewall hits: {ex.Message}";
             if (message != _lastHitsError)
                 ShowError(message);
@@ -156,22 +162,30 @@ public partial class MainWindow
 
     private string? _lastHitsError;
 
-    private static (List<FirewallLogEntry>, string?) ReadAll(List<FirewallLogTail> tails)
+    // Why an empty panel is empty. Without these, a log Windows never created and a log
+    // whose newest line is an hour old both showed as a blank grid with no reason.
+    private List<string> _missingLogs = new();
+    private DateTime? _newestLogLine;
+
+    private static (List<FirewallLogEntry>, string?, List<string>) ReadAll(List<FirewallLogTail> tails)
     {
         var entries = new List<FirewallLogEntry>();
+        var missing = new List<string>();
         string? error = null;
         foreach (var tail in tails)
         {
             try
             {
-                entries.AddRange(tail.ReadNew().NewEntries);
+                var result = tail.ReadNew();
+                if (result.Missing) missing.Add(tail.FileName);
+                entries.AddRange(result.NewEntries);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 error ??= $"Couldn't read {tail.FileName}: {ex.Message}";
             }
         }
-        return (entries, error);
+        return (entries, error, missing);
     }
 
     private void UpdateHitsView(string? error = null)
@@ -203,9 +217,22 @@ public partial class MainWindow
             ? $"since {cleared:HH:mm}"
             : "last 5 minutes";
         HitsTitle.Text = error
+                         ?? (_sources.Count == 0 ? EmptyHitsReason(since) : null)
                          ?? $"Top sources · {since}{(_hits.Capped ? " · only the newest 20,000 hits counted" : "")}";
         HitsTitle.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty,
             error != null ? "ErrorBrush" : "TextSecondaryBrush");
+    }
+
+    // Null when there is nothing more to say than "no hits".
+    private string? EmptyHitsReason(string since)
+    {
+        if (_missingLogs.Count > 0)
+            return $"No hits · {string.Join(", ", _missingLogs.Distinct())} doesn't exist yet; Windows creates it when it first logs a packet";
+        if (_newestLogLine is { } newest)
+            return $"No hits {since} · the newest line in the log is from {newest:g}";
+        if (_hitsTails.Count > 0)
+            return "No hits · the log has no entries yet";
+        return null;
     }
 
     private void OnNameResolved(string address, string name)

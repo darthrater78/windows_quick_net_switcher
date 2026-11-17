@@ -86,6 +86,7 @@ These operations are gated behind admin rights by Windows itself:
 | Change an interface metric | `netsh interface ipv4 set interface` | Modifies the system routing configuration |
 | Toggle a firewall profile | `netsh advfirewall set <profile>profile state` | Modifies Windows Firewall policy |
 | Turn firewall logging on/off | `netsh advfirewall set <profile>profile logging droppedconnections\|allowedconnections` | Modifies Windows Firewall policy |
+| Start a log file that doesn't exist | `netsh advfirewall set <profile>profile logging filename\|maxfilesize`, re-set to the value it already has | Re-writes an existing firewall logging setting; once per profile per session |
 | Turn DNS registration on/off | WMI `Win32_NetworkAdapterConfiguration.SetDynamicDNSRegistration` | Changes the adapter's TCP/IP configuration |
 | Register now | `ipconfig /registerdns` | Asks the DNS Client service to re-register every adapter |
 | Read the firewall log | Opens `pfirewall.log` read-only | The log folder is readable only by administrators |
@@ -142,8 +143,10 @@ Every value that reaches a privileged call is constrained before it gets there:
 | Privileged call | Where the input comes from | Guard |
 |---|---|---|
 | WMI `Enable`/`Disable` | Adapter `DeviceID`, originally read from WMI | `int.TryParse` must succeed before the value is interpolated into the WQL query, so a non-numeric value is rejected rather than embedded |
-| `netsh interface ipv4 set interface` | The metric dialog — the only free-text input in the app | Validated twice, in the dialog and again in the service: integer, 1–9999. The interface alias comes from WMI, not from typed input |
+| `netsh interface ipv4 set interface` | The metric dialog | Validated twice, in the dialog and again in the service: integer, 1–9999. The interface alias comes from WMI, not from typed input |
+| `netsh interface ipv4 set address` / `set dnsservers` / `add dnsservers` | The IP settings dialog, or a preset from `settings.json`, which the user (and so any program running as them) can edit | Validated in the dialog and again in the service immediately before `netsh`: dotted-quad IPv4 only (no shorthand like `10.1` or leading zeros), prefix 1–32, no network, broadcast, loopback, multicast or `0.x` address, a gateway inside the subnet, at most two DNS servers. Presets read from the file pass the same check at load, and any that fail are dropped. Each value is its own argument. The interface alias comes from WMI. ZTNA tunnel adapters are refused. Every change is undone unless you press **Keep** within 15 seconds, so a change that cuts this machine off reverts on its own |
 | `netsh advfirewall set` | Firewall profile name | Checked against an allowlist of `Domain`, `Private`, `Public` in the service before any `netsh` call; never free text |
+| `netsh advfirewall set … logging filename` | Log path, read from the registry | Only passed back when it already passed the local-fixed-drive check that guards reading the log (no UNC, device or mapped path, no variable but `%systemroot%`/`%windir%`), and only as the value already set; skipped when logging comes from Group Policy. Its own argument, no shell |
 | WMI `SetDynamicDNSRegistration` | Adapter `DeviceID`, from WMI | Parsed as an unsigned integer before it is placed in the WQL query. The "use this connection's DNS suffix" flag is read and written back unchanged |
 | Clearing `pfirewall.log` | The log path, validated as for reading | Additionally refused unless the file is in `%windir%\System32\LogFiles\Firewall`, a folder only administrators can change, so an elevated truncate can't be pointed at another file through a user-writable folder. Asks for confirmation first |
 | Turning logging off at close or launch | `settings.json`, which the user (and so any program running as them) can edit | Entries are checked against the profile allowlist and are only ever used to turn logging **off**, so an edited file cannot turn any logging on |
@@ -152,11 +155,12 @@ Every value that reaches a privileged call is constrained before it gets there:
 
 Every `Process.Start` call sets `UseShellExecute = false`, so arguments are
 passed directly to the target process — no shell is involved and no shell
-metacharacters are interpreted. The `netsh` calls all go through one runner
-(`NetshRunner.cs`) that passes each argument separately rather than as a single
-string, and kills a `netsh` that has not finished within 5 seconds, reporting it
-as a failure rather than waiting on it. `ipconfig` and `wevtutil` go through the
-same runner (`ProcessRunner.cs`) with a 15-second limit.
+metacharacters are interpreted. Every helper goes through one runner
+(`ProcessRunner.cs`) that passes each argument separately rather than as a single
+string, and kills a helper that has not finished in time, reporting it as a
+failure rather than waiting on it. `netsh` gets 5 seconds (`NetshRunner.cs`),
+except when changing IP settings, which waits on duplicate address detection and
+gets 20; `ipconfig` and `wevtutil` get 15.
 
 The executables themselves are launched by **absolute path**, resolved once in
 `SystemPaths.cs`, rather than by bare name. This matters because `CreateProcess`
@@ -199,16 +203,18 @@ as the bare-name launch above, through the loader rather than through
 
 | File | Contents |
 |---|---|
-| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Four booleans (minimize-to-tray, pin-to-desktop, simple-view, hide-disconnected), a nullable dark-mode flag, where null means "follow Windows", and the accent's name |
+| `%LOCALAPPDATA%\QuickNetSwitcher\settings.json` | Four booleans (minimize-to-tray, pin-to-desktop, simple-view, hide-disconnected), a nullable dark-mode flag, where null means "follow Windows", the accent's name, and up to 50 named IP presets (addresses, prefix, gateway, DNS servers) in plain text: these are not secrets |
 | `%LOCALAPPDATA%\QuickNetSwitcher\adapter_order.json` | A list of adapter ID strings used for display order |
 
 Both are read with `System.Text.Json` into concrete types (`AppSettings` and
 `List<string>`), with no polymorphic or type-name handling — a tampered file
-cannot cause arbitrary types to be constructed. The values are also never
-forwarded to a privileged call: adapter IDs from the order file are used solely
-as sort keys for the list, and an accent name that is not one of the four the
-app knows is replaced by the default before it is used. Unreadable or corrupt
-files fall back to defaults.
+cannot cause arbitrary types to be constructed. Adapter IDs from the order file
+are used solely as sort keys for the list, and an accent name that is not one of
+the four the app knows is replaced by the default before it is used. IP presets
+are the one value that reaches a privileged call (`netsh`, when you apply one),
+so each is validated when the file is read and again before it is applied, and
+one that fails is dropped (see the table above). Unreadable or corrupt files
+fall back to defaults.
 
 ### Known limitations and hardening notes
 

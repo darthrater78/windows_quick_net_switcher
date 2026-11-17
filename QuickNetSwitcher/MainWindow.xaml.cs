@@ -79,6 +79,8 @@ public partial class MainWindow : Window
         AdapterList.ItemsSource = _adapters;
         _adapterView = CollectionViewSource.GetDefaultView(_adapters);
         _adapterView.Filter = IsAdapterVisible;
+        if (_adapterView is ListCollectionView adapterList)
+            adapterList.CustomSort = new AdapterGroupOrder(_adapters);
         InitLogging();
         _ = TurnOffLeftoverLoggingAsync();
         _ = LoadAdaptersAsync();
@@ -118,16 +120,21 @@ public partial class MainWindow : Window
 
         MinimizeToTrayMenuItem.IsChecked = _settings.MinimizeToTray;
         PinToDesktopMenuItem.IsChecked = _settings.PinToDesktop;
-        ShowAllDetailsCheckBox.IsChecked = !_settings.SimpleView;
+        // "Expand all" last time: every row opens on the first load.
+        _expandAllOnLoad = !_settings.SimpleView;
+        AdapterViewModel.PresetSource = () => _settings.IpPresets;
+
+        // Fit the window to the adapter list from the start. This used to happen as a
+        // side effect of applying "Show all details"; with that gone it is done here.
+        // SizeToContent stays live, so rows arriving later still resize it.
+        UpdateWindowSizing(refit: true);
         HideDisconnectedCheckBox.IsChecked = _settings.HideDisconnected;
-        ApplySimpleView(_settings.SimpleView);
     }
 
     private void SaveSettings()
     {
         _settings.MinimizeToTray = MinimizeToTrayMenuItem.IsChecked == true;
         _settings.PinToDesktop = PinToDesktopMenuItem.IsChecked == true;
-        _settings.SimpleView = ShowAllDetailsCheckBox.IsChecked != true;
         _settings.HideDisconnected = HideDisconnectedCheckBox.IsChecked == true;
         if (!SettingsService.Save(_settings))
             ShowError("Couldn't save settings");
@@ -264,19 +271,26 @@ public partial class MainWindow : Window
         || adapter.IsConnected
         || !adapter.IsEnabled;
 
-    private void ShowAllDetails_Click(object sender, RoutedEventArgs e)
-    {
-        ApplySimpleView(ShowAllDetailsCheckBox.IsChecked != true);
-        SaveSettings();
-    }
+    private bool _expandAllOnLoad;
 
-    // Simple view is the default: one line per adapter, with a row's details opened
-    // by clicking it. "Show all details" turns it off and opens every row.
-    private void ApplySimpleView(bool simple)
+    private void ExpandAll_Click(object sender, RoutedEventArgs e) => SetAllExpanded(true);
+
+    private void CollapseAll_Click(object sender, RoutedEventArgs e) => SetAllExpanded(false);
+
+    // Every row closed is the default: one line per adapter, a row's details opened by
+    // clicking it. Expand all / Collapse all open or close every row at once; a row
+    // can still be toggled on its own afterwards. The choice is remembered as
+    // SimpleView, so the next launch opens the same way.
+    private void SetAllExpanded(bool expanded)
     {
         foreach (var adapter in _adapters)
-            adapter.SimpleView = simple;
-
+        {
+            adapter.IsExpanded = expanded;
+            if (expanded) _expandedIds.Add(adapter.AdapterId);
+            else _expandedIds.Remove(adapter.AdapterId);
+        }
+        _settings.SimpleView = !expanded;
+        SaveSettings();
         UpdateWindowSizing(refit: true);
     }
 
@@ -309,6 +323,12 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void ToggleDetails_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: AdapterViewModel adapter })
+            ToggleExpanded(adapter);
+    }
+
     private void ToggleExpanded(AdapterViewModel adapter)
     {
         adapter.IsExpanded = !adapter.IsExpanded;
@@ -323,14 +343,19 @@ public partial class MainWindow : Window
 
     // A window that fits its content grows downwards. When that would put its bottom
     // under the taskbar it moves up instead, so the footer stays in view.
+    // The same for width: a window that grows to fit a wider row moves left rather
+    // than run off the right edge.
     private void KeepOnScreen(SizeChangedEventArgs e)
     {
-        if (!e.HeightChanged || e.NewSize.Height <= e.PreviousSize.Height
-            || WindowState != WindowState.Normal || _isPinnedToDesktop) return;
+        if (WindowState != WindowState.Normal || _isPinnedToDesktop) return;
 
         var area = SystemParameters.WorkArea;
-        if (Top + e.NewSize.Height > area.Bottom)
+        if (e.HeightChanged && e.NewSize.Height > e.PreviousSize.Height
+            && Top + e.NewSize.Height > area.Bottom)
             Top = Math.Max(area.Top, area.Bottom - e.NewSize.Height);
+        if (e.WidthChanged && e.NewSize.Width > e.PreviousSize.Width
+            && Left + e.NewSize.Width > area.Right)
+            Left = Math.Max(area.Left, area.Right - e.NewSize.Width);
     }
 
     // Remembers the height the user picked, so leaving simple view restores it.
@@ -370,10 +395,21 @@ public partial class MainWindow : Window
     // `refit` re-applies fitting even when the mode has not changed: a hand resize
     // switches WPF out of SizeToContent on its own, and opening the log or the details
     // should still fit the window afterwards.
+    // On the Adapters tab the width fits too: an adapter's one-line row holds its name,
+    // status, address, preset tag and buttons, and it widens the window rather than
+    // squeeze them. Never narrower than the 620 the layout is drawn for, never wider
+    // than FitMaxWidth or the screen. The firewall profiles fit height only: their
+    // grid would take whatever width it is offered.
+    private const double FitMinWidth = 620;
+    private const double FitMaxWidth = 1000;
+
     private void UpdateWindowSizing(bool refit = false)
     {
         var fitToContent = FitsContent;
-        var fitting = SizeToContent == SizeToContent.Height;
+        var fitting = SizeToContent != SizeToContent.Manual;
+        var fitMode = MainTabs.SelectedIndex <= 0 ? SizeToContent.WidthAndHeight : SizeToContent.Height;
+        if (fitToContent && fitting && SizeToContent != fitMode)
+            refit = true;
 
         // Already in the right mode: leave the window exactly as the user left it.
         if (fitToContent == fitting && !(refit && fitToContent))
@@ -390,9 +426,19 @@ public partial class MainWindow : Window
             // MaxHeight has to be capped or a long adapter list grows past the screen.
             MinHeight = 0;
             MaxHeight = SystemParameters.WorkArea.Height;
+            if (fitMode == SizeToContent.WidthAndHeight)
+            {
+                MinWidth = Math.Min(FitMinWidth, SystemParameters.WorkArea.Width);
+                MaxWidth = Math.Min(FitMaxWidth, SystemParameters.WorkArea.Width);
+            }
+            else
+            {
+                MinWidth = 500;
+                MaxWidth = double.PositiveInfinity;
+            }
             if (fitting)
                 SizeToContent = SizeToContent.Manual;
-            SizeToContent = SizeToContent.Height;
+            SizeToContent = fitMode;
         }
         else
         {
@@ -402,6 +448,8 @@ public partial class MainWindow : Window
             SizeToContent = SizeToContent.Manual;
             MinHeight = DetailViewMinHeight;
             MaxHeight = double.PositiveInfinity;
+            MinWidth = 500;
+            MaxWidth = double.PositiveInfinity;
             Height = ManualHeight();
         }
 
@@ -537,10 +585,12 @@ public partial class MainWindow : Window
             _adapters.Clear();
             foreach (var a in ordered)
             {
-                a.SimpleView = _settings.SimpleView;
+                a.SimpleView = true;
+                if (_expandAllOnLoad) _expandedIds.Add(a.AdapterId);
                 a.IsExpanded = _expandedIds.Contains(a.AdapterId);
                 _adapters.Add(a);
             }
+            _expandAllOnLoad = false;
 
             UpdateAdapterCount();
         }
@@ -677,7 +727,7 @@ public partial class MainWindow : Window
         foreach (var info in incoming.Values)
         {
             var adapter = AdapterViewModel.FromInfo(info);
-            adapter.SimpleView = _settings.SimpleView;
+            adapter.SimpleView = true;
             _adapters.Add(adapter);
             changed = true;
         }
@@ -760,6 +810,7 @@ public partial class MainWindow : Window
             ShowFirewallSummary();
             UpdateHitsView();
             _ = RefreshNetworkMapAsync();
+            _ = NudgeMissingLogsAsync(profiles);
         }
         catch (Exception ex)
         {
@@ -1132,6 +1183,15 @@ public partial class MainWindow : Window
             && GetListBoxItemAt(AdapterList, pos) is { DataContext: AdapterViewModel target } targetItem
             && target != dragged)
         {
+            // Rows only move within their group (connected, not connected, disabled),
+            // so a row in another group is not a place to drop.
+            if (!AdapterGroupOrder.SameGroup(dragged, target))
+            {
+                e.Effects = DragDropEffects.None;
+                _dragGhost?.UpdatePosition(pos, null);
+                return;
+            }
+
             var top = targetItem.TranslatePoint(new System.Windows.Point(0, 0), AdapterList).Y;
             insertAt = _adapters.IndexOf(dragged) < _adapters.IndexOf(target)
                 ? top + targetItem.ActualHeight
@@ -1153,6 +1213,12 @@ public partial class MainWindow : Window
         var oldIndex = _adapters.IndexOf(dragged);
         if (oldIndex < 0) return;
 
+        if (target != null && target != dragged && !AdapterGroupOrder.SameGroup(dragged, target))
+        {
+            ShowStatus("Connected adapters stay at the top and disabled ones at the bottom; drag within a group");
+            return;
+        }
+
         int newIndex;
         if (target != null && target != dragged)
         {
@@ -1166,7 +1232,29 @@ public partial class MainWindow : Window
         if (oldIndex == newIndex) return;
 
         _adapters.Move(oldIndex, newIndex);
+        _adapterView?.Refresh();
         SaveAdapterOrder();
         ShowStatus($"Adapter order updated");
+    }
+
+    // Connected adapters first, disabled ones last, everything else in between, and
+    // the user's dragged order within each group. Re-applied whenever the list
+    // refreshes, so an adapter that connects or is switched off moves on its own.
+    private sealed class AdapterGroupOrder : System.Collections.IComparer
+    {
+        private readonly IList<AdapterViewModel> _order;
+
+        public AdapterGroupOrder(IList<AdapterViewModel> order) => _order = order;
+
+        private static int Rank(AdapterViewModel a) => !a.IsEnabled ? 2 : a.IsConnected ? 0 : 1;
+
+        public static bool SameGroup(AdapterViewModel a, AdapterViewModel b) => Rank(a) == Rank(b);
+
+        public int Compare(object? x, object? y)
+        {
+            if (x is not AdapterViewModel a || y is not AdapterViewModel b) return 0;
+            var byGroup = Rank(a).CompareTo(Rank(b));
+            return byGroup != 0 ? byGroup : _order.IndexOf(a).CompareTo(_order.IndexOf(b));
+        }
     }
 }
