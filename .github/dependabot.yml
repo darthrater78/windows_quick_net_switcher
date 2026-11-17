@@ -15,6 +15,11 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    # The app stays on .NET LTS lines. System.Management is versioned with the
+    # runtime, so 11.x is the non-LTS line; move only with the next LTS (12).
+    ignore:
+      - dependency-name: "System.Management"
+        versions: [">= 11.0.0"]
     groups:
       # Grouped for review convenience, not as a risk judgement. Majors stay
       # ungrouped: each is a breaking change with its own review.
