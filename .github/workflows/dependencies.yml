@@ -32,7 +32,7 @@ jobs:
   audit:
     if: github.event_name != 'pull_request'
     # Restore only, so Linux is enough; EnableWindowsTargeting lets it restore a
-    # net8.0-windows project off Windows. Set for the whole job, not as -p: on
+    # net10.0-windows project off Windows. Set for the whole job, not as -p: on
     # restore, because `dotnet list package` restores again without it.
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -46,7 +46,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Restore
         run: dotnet restore

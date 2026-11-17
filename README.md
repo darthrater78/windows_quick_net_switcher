@@ -2,7 +2,7 @@
 
 A small Windows utility for switching network adapters and firewall profiles on and off, kept in the system tray.
 
-![.NET 8](https://img.shields.io/badge/.NET-8.0-blue)
+![.NET 10](https://img.shields.io/badge/.NET-10.0-blue)
 ![Windows](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -222,6 +222,11 @@ Stated plainly rather than left for you to discover:
   by this repository's release workflow from a specific commit. With the
   [GitHub CLI](https://cli.github.com/) you can check a download with
   `gh attestation verify QuickNetSwitcher-vX.Y.Z.exe -R darthrater78/windows_quick_net_switcher`.
+- **The runtime is bundled, so it updates only with the app.** The exe carries
+  its own copy of the .NET 10 LTS runtime, supported until 2028-11-14, and gets
+  runtime security fixes only when a new release is built. v1.4.0 and earlier
+  bundle .NET 8, which went out of support on 2026-11-10; replace them with a
+  newer release.
 - **Firewall status parsing is English-only.** Profile detection matches the
   literal strings `Domain Profile` / `Private Profile` / `Public Profile` and
   `State` in `netsh` output, and a failed toggle is detected by looking for the
@@ -241,8 +246,8 @@ Stated plainly rather than left for you to discover:
 
 ## Download Size
 
-The release exe is about 160 MB because it is published as a **self-contained
-single-file** binary — the entire .NET 8 runtime is bundled so you don't need
+The release exe is about 170 MB because it is published as a **self-contained
+single-file** binary — the entire .NET 10 runtime is bundled so you don't need
 to install .NET on the target machine. No installer required: just download,
 right-click, and run as administrator.
 
@@ -250,7 +255,7 @@ right-click, and run as administrator.
 
 ### Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - Windows (WPF requires Windows)
 
 ### Build
@@ -377,7 +382,7 @@ the merge into the collection touches the UI thread.
   at present. CI builds the project but does not test it.
 - There is **no dependency injection or configuration layer**; services are
   called directly by name.
-- The project targets `net8.0-windows` and publishes as a self-contained,
+- The project targets `net10.0-windows` and publishes as a self-contained,
   single-file `win-x64` binary, which is why the release is large (see
   [Download Size](#download-size)).
 
