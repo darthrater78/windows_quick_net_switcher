@@ -6,7 +6,7 @@ A small Windows utility for switching network adapters and firewall profiles on 
 ![Windows](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-[GitHub](https://github.com/darthrater78/windows_quick_net_switcher) · [v2026.11.17 release notes](https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v2026.11.17)
+[GitHub](https://github.com/darthrater78/windows_quick_net_switcher) · [v2026.11.19 release notes](https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v2026.11.19)
 
 ## Features
 
@@ -40,7 +40,7 @@ A small Windows utility for switching network adapters and firewall profiles on 
 **General**
 - One copy at a time: launching it again brings the running copy to the front
 - System tray icon — minimize to tray and keep it running in the background
-- Pin to desktop — keep the window on the desktop layer behind other apps, like a widget (on by default)
+- Pin to desktop — keep the window behind other apps, like a widget (on by default)
 - The window fits what it shows: the adapter list grows and shrinks as rows' details open and close or Expand all is used, the Firewall tab fits the profiles and the hits panel, and opening the activity log makes room for it. The route table and the full firewall log keep the height you give them
 - Dark theme — follows the Windows app theme by default, with a toggle in the settings menu to override it. Both themes cover the window chrome, tabs, buttons, checkboxes, scrollbars, the route grid, the metric dialog, the title bar and the tray menu
 - Accent colour — teal by default; the settings menu also offers your Windows accent colour, green, or none. It colours switches that are on, the selected tab, ticked boxes, links and the tray icon
@@ -179,6 +179,8 @@ the next launch and its `DllMain` would run as administrator — the same escala
 as the bare-name launch above, through the loader rather than through
 `CreateProcess`. `user32.dll` is a `KnownDLL` and is always resolved from
 `System32` regardless; its imports are pinned too, so no import depends on that.
+`wtsapi32.dll`, used to find the desktop user, is not a `KnownDLL` and is pinned
+like `dwmapi.dll`.
 
 ### What the app does not do
 
@@ -241,10 +243,20 @@ Stated plainly rather than left for you to discover:
   `State` in `netsh` output, and a failed toggle is detected by looking for the
   word `Error`. On a non-English Windows install the firewall tab may show no
   profiles, and a failure may be reported as success.
-- **The pinned window is reparented into the shell.** "Pin to desktop" uses
-  `SetParent` to place this elevated window underneath a window owned by the
-  unelevated desktop shell. It is an unusual arrangement; turn the setting off
-  if you would rather not have it.
+- **Pinning never touches the shell's windows.** "Pin to desktop" keeps the
+  window an ordinary top-level window and holds it at the bottom of the z-order
+  with `SetWindowPos` and its own `WM_WINDOWPOSCHANGING` handler. Earlier
+  versions reparented this elevated window into the unelevated desktop shell's
+  `WorkerW` window, which joined the two processes' input and could freeze both
+  the app and Explorer at startup.
+- **Appearance is read from the desktop user's registry hive.** The theme and
+  the Windows accent are read from `HKEY_USERS\<SID>` of the user signed in to
+  this session, not from the elevated process's own HKCU, which belongs to the
+  administrator whose credentials were typed at the UAC prompt. That user can
+  write those values, as they always could their own HKCU; the app reads only
+  two integers from them and uses them only as colours. The SID comes from
+  `WTSQuerySessionInformation` and is used as a registry path only if it is
+  made of `S`, digits and dashes.
 - **One instance per user session.** A named mutex and event under `Local\`, with the user's SID in the name, keep a second copy from starting and bring the first to the front. Both are created with an ACL that admits only Administrators and SYSTEM, so an unelevated program can't signal the app or hold the names. A name someone else created first is recognised by its owner not being Administrators or SYSTEM and ignored, so squatting it can't stop the app starting. On a machine whose policy makes the creating user, not Administrators, the owner of an elevated process's objects, the same check fails open: the app starts, and a second copy is possible.
 - **Firewall logging state is read from the registry.** The app reads the local
   firewall policy and Group Policy keys for each profile; a setting made by
@@ -299,12 +311,12 @@ The output will be a single `QuickNetSwitcher.exe` in the `publish/` folder.
 - **Firewall hits:** The log records neither the interface nor the profile, so each hit is placed by its local address: the destination of an inbound packet, the source of an outbound one. An exact match with an adapter's address names that adapter; broadcast and multicast traffic is matched by subnet instead. The profile is the network category Windows has given that interface (`MSFT_NetConnectionProfile` in `root\StandardCimv2`), read when the hit is read and refreshed every 30 seconds. Because logging is set per profile, a line can only come from a profile that logs that kind of hit: when the interface points at a profile that doesn't, and exactly one profile does, the hit is counted under that one. Windows evaluates some traffic, such as multicast a service sends from every adapter's address, under another interface's profile, which is where the interface alone would mislead. The last 5 minutes are kept in memory, at most 20,000 hits.
 - **DNS registration:** The checkbox reads `FullDNSRegistrationEnabled` from `Win32_NetworkAdapterConfiguration` and writes it with `SetDynamicDNSRegistration`. "Register now" runs `ipconfig /registerdns`, then queries `HOST.<primary suffix>` (or the connection's suffix) with `DnsQuery` using the network only, bypassing the cache and hosts file, every 3 seconds for up to 30 seconds, checks the reverse record, and reads DNS Client warnings from the System log with `wevtutil`.
 - **Closing:** Background work — the DNS check and the log viewer — is tied to one cancellation token and timer that closing the window or exiting from the tray stops. The log file is open only for the moment of each read, and helpers have time limits, so nothing can hold the app open.
-- **Pin to desktop:** Uses Win32 interop to parent the window to the desktop's WorkerW layer, placing it behind all other windows.
+- **Pin to desktop:** Holds the window at the bottom of the z-order (`HWND_BOTTOM`, re-applied on every z-order change), so it sits behind all other windows. "Show desktop" (Win+D) hides it like any other window.
 - **Simple view:** A flag on each `AdapterViewModel` hides the row's detail line, leaving the name, the status in words, the address and the switch. It is on for every row; no row opens on its own. Clicking a row sets a second flag, `IsExpanded`, that opens just that row, and Expand all / Collapse all set it on every row and remember the choice (as `SimpleView` in settings) for the next launch; the window remembers which rows are open by adapter id, because a full reload rebuilds the view models. On the Adapters tab, in either view, and on the Firewall tab's profiles the window uses `SizeToContent="Height"`, so it fits what it shows and refits when details or the activity log open or close; a window that grows moves up to stay above the taskbar. The route table and the firewall log viewer would measure to every row they hold, so they use the height the user last gave them instead.
 - **Hide disconnected:** A filter on the adapter list's `ICollectionView`, so hidden adapters stay in the underlying collection and the saved display order keeps its full set. A filter is not re-evaluated when an item's own properties change, so the view is refreshed explicitly after a status update — otherwise an adapter that had just dropped its link would sit there until the list was rebuilt. Disabled adapters are never filtered out — switching one back on is what the app is for, and hiding it would put the row you just toggled off out of reach. The count of what the filter removed is shown on the checkbox itself, since the status line carrying it is overwritten by the next action.
 - **Reorder ghost:** Dragging a row's handle adds a `DragGhostAdorner` to the list's adorner layer, painting a translucent `VisualBrush` copy of the whole row that tracks the pointer, plus a 2px bar on the edge the row will take up. WPF supplies no drag visual of its own beyond the cursor.
-- **Theming:** Two `ResourceDictionary` palettes (`Themes/Light.xaml`, `Themes/Dark.xaml`) define the same key set, and `ThemeService` swaps one for the other in slot 0 of the application's merged dictionaries. Every colour is referenced with `DynamicResource`, so the swap propagates without rebuilding any window. The default comes from `AppsUseLightTheme` under `HKCU\...\Themes\Personalize`; clicking the toggle stores an explicit choice that stops following Windows. The title bar is darkened separately through `DwmSetWindowAttribute`, since the caption is drawn by the OS rather than WPF, and the tray menu and tray icon are coloured by hand from the same brushes because Windows Forms sits outside WPF's resource system.
-- **Accent:** Each palette defines the named accents as colours (`AccentTealColor` and so on); `ThemeService` writes the chosen one into three brushes in the application's own dictionary, which is searched before the merged palette, and rewrites them on every theme change. "Match Windows" reads `AccentColor` under `HKCU\SOFTWARE\Microsoft\Windows\DWM` when the theme or accent is applied. Because that colour is whatever the user set, it is checked against the WCAG ratios first: one below 3:1 against the row colour is replaced by the text colour, and one below 4.5:1 is not used for link text.
+- **Theming:** Two `ResourceDictionary` palettes (`Themes/Light.xaml`, `Themes/Dark.xaml`) define the same key set, and `ThemeService` swaps one for the other in slot 0 of the application's merged dictionaries. Every colour is referenced with `DynamicResource`, so the swap propagates without rebuilding any window. The default comes from `AppsUseLightTheme` under `...\Themes\Personalize` in the desktop user's hive (see Accent); clicking the toggle stores an explicit choice that stops following Windows. The title bar is darkened separately through `DwmSetWindowAttribute`, since the caption is drawn by the OS rather than WPF, and the tray menu and tray icon are coloured by hand from the same brushes because Windows Forms sits outside WPF's resource system.
+- **Accent:** Each palette defines the named accents as colours (`AccentTealColor` and so on); `ThemeService` writes the chosen one into three brushes in the application's own dictionary, which is searched before the merged palette, and rewrites them on every theme change. "Match Windows" reads `AccentColor` under `SOFTWARE\Microsoft\Windows\DWM` when the theme or accent is applied, then `AccentColorMenu` under `SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Accent`, then `DwmGetColorizationColor`, since a fresh install may not have written the first; only when all three fail does it fall back to teal. The status line names the source it used. Both registry values, and the Windows dark/light setting, are read from the hive of the user signed in at the desktop (`HKEY_USERS\<SID>`, the session user from `WTSQuerySessionInformation`), not this process's HKCU: someone who elevates with a separate administrator's credentials runs the app as that administrator, whose HKCU holds a different theme. HKCU is the fallback. Because that colour is whatever the user set, it is checked against the WCAG ratios first: one below 3:1 against the row colour is replaced by the text colour, and one below 4.5:1 is not used for link text.
 - **Settings:** Minimize-to-tray, pin-to-desktop, the theme and the accent sit behind the gear in the footer, since they are set once and left alone; hide-disconnected and Expand all / Collapse all stay under the tabs, because they change what you are looking at. All of them are persisted to `%LOCALAPPDATA%/QuickNetSwitcher/settings.json`.
 - **Links:** The GitHub and release-notes links sit in the footer beside the status line, which every view keeps. URLs are passed to `explorer.exe` rather than shell-executed directly. Because the app runs elevated, a direct `ShellExecute` would launch the default browser as administrator; handing the URL to explorer delegates it to the user-level shell instead. The release notes URL is built from the assembly version, so it always points at the running build's own release.
 - The UI is built with WPF and uses Windows Forms interop for the system tray icon. The app requests administrator elevation on launch since adapter, IP, metric, and firewall changes all require it.
@@ -400,6 +412,10 @@ the merge into the collection touches the UI thread.
   [Download Size](#download-size)).
 
 ## Version History
+
+### v2026.11.19 — 2026-11-19
+- Fixed: with "Pin to desktop" on (the default), the app could freeze at startup and take Explorer with it, needing a restart of both. The pinned window is no longer reparented into the desktop shell; it stays an ordinary window held behind all others. "Show desktop" (Win+D) now hides it like any other window
+- Fixed: "Match Windows" showed teal, and the light/dark theme could ignore Windows, when the app was elevated with a separate administrator's name and password. The theme and accent are now read from the account signed in at the desktop, not the administrator's. The status line says where the Windows accent was read from
 
 ### v2026.11.17 — 2026-11-17
 - **Breaking (building from source only):** the project targets .NET 10 LTS, so building it needs the .NET 10 SDK. The exe still carries its own runtime and needs nothing installed. .NET 8, which v1.4.0 bundles, went out of support on 2026-11-10
@@ -497,4 +513,4 @@ https://github.com/darthrater78/windows_quick_net_switcher
 
 ## Release Notes
 
-https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v2026.11.17
+https://github.com/darthrater78/windows_quick_net_switcher/releases/tag/v2026.11.19

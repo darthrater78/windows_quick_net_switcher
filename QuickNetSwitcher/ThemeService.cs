@@ -18,6 +18,7 @@ public static class ThemeService
     private const string PersonalizeKeyPath =
         @"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize";
     private const string DwmKeyPath = @"SOFTWARE\Microsoft\Windows\DWM";
+    private const string ExplorerAccentKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Accent";
 
     public const string DefaultAccent = "Teal";
     public const string WindowsAccent = "Windows";
@@ -44,6 +45,10 @@ public static class ThemeService
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
+    [DllImport("dwmapi.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static extern int DwmGetColorizationColor(out uint colorization, [MarshalAs(UnmanagedType.Bool)] out bool opaqueBlend);
+
     /// <summary>The theme currently applied.</summary>
     public static bool IsDark { get; private set; }
 
@@ -58,7 +63,7 @@ public static class ThemeService
     {
         try
         {
-            using var key = Registry.CurrentUser.OpenSubKey(PersonalizeKeyPath, false);
+            using var key = DesktopUser.OpenKey(PersonalizeKeyPath);
             // AppsUseLightTheme is 0 for dark, 1 for light, and absent on older builds.
             return key?.GetValue("AppsUseLightTheme") is int useLight && useLight == 0;
         }
@@ -106,9 +111,17 @@ public static class ThemeService
         var surface = ColorOf(palette, "SurfaceBrush");
         var text = ColorOf(palette, "TextPrimaryBrush");
 
-        var fill = Accent == WindowsAccent
-            ? WindowsAccentColor() ?? (Color)palette[$"Accent{DefaultAccent}Color"]
-            : (Color)palette[$"Accent{Accent}Color"];
+        Color fill;
+        if (Accent == WindowsAccent)
+        {
+            var (windows, source) = WindowsAccentColor();
+            WindowsAccentSource = source;
+            fill = windows ?? (Color)palette[$"Accent{DefaultAccent}Color"];
+        }
+        else
+        {
+            fill = (Color)palette[$"Accent{Accent}Color"];
+        }
 
         // The named accents were chosen to pass against both surfaces. A Windows
         // accent is whatever the user set, so it is checked: one too close to the
@@ -139,19 +152,50 @@ public static class ThemeService
         return brush;
     }
 
-    // The accent from Settings > Personalisation > Colours, stored as 0xAABBGGRR.
-    // Absent on builds older than Windows 10, where the caller falls back.
-    private static Color? WindowsAccentColor()
+    // The accent from Settings > Personalisation > Colours. DWM's AccentColor is only
+    // written once the user (or a theme) has applied colours, so a fresh install can
+    // lack it; Explorer's AccentColorMenu holds the same accent, and DWM's colorization
+    // colour is always there. Null only when all three fail, and the caller falls back.
+    private static (Color? Color, string Source) WindowsAccentColor()
+    {
+        if (RegistryAbgr(DwmKeyPath, "AccentColor") is { } dwm) return (dwm, "DWM AccentColor");
+        if (RegistryAbgr(ExplorerAccentKeyPath, "AccentColorMenu") is { } menu) return (menu, "Explorer AccentColorMenu");
+        if (DwmColorization() is { } colorization) return (colorization, "DWM colorization");
+        return (null, "not found, teal used");
+    }
+
+    /// <summary>Where the last "Match Windows" colour was read from, for the status line.</summary>
+    public static string WindowsAccentSource { get; private set; } = "";
+
+    // Both registry values are DWORDs laid out 0xAABBGGRR.
+    private static Color? RegistryAbgr(string keyPath, string valueName)
     {
         try
         {
-            using var key = Registry.CurrentUser.OpenSubKey(DwmKeyPath, false);
-            if (key?.GetValue("AccentColor") is not int abgr) return null;
+            using var key = DesktopUser.OpenKey(keyPath);
+            if (key?.GetValue(valueName) is not int abgr) return null;
 
             return Color.FromRgb(
                 (byte)(abgr & 0xFF),
                 (byte)((abgr >> 8) & 0xFF),
                 (byte)((abgr >> 16) & 0xFF));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // DwmGetColorizationColor reports 0xAARRGGBB, the other byte order.
+    private static Color? DwmColorization()
+    {
+        try
+        {
+            if (DwmGetColorizationColor(out var argb, out _) != 0) return null;
+            return Color.FromRgb(
+                (byte)((argb >> 16) & 0xFF),
+                (byte)((argb >> 8) & 0xFF),
+                (byte)(argb & 0xFF));
         }
         catch
         {

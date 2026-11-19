@@ -210,7 +210,9 @@ public partial class MainWindow : Window
 
         _settings.Accent = ThemeService.Accent;
         SaveSettings();
-        ShowStatus("Accent changed");
+        ShowStatus(ThemeService.Accent == ThemeService.WindowsAccent
+            ? $"Accent changed: Windows accent from {ThemeService.WindowsAccentSource}"
+            : "Accent changed");
     }
 
     // The four accent items behave as one choice: clicking the ticked one must not
@@ -351,7 +353,7 @@ public partial class MainWindow : Window
     // than run off the right edge.
     private void KeepOnScreen(SizeChangedEventArgs e)
     {
-        if (WindowState != WindowState.Normal || _isPinnedToDesktop) return;
+        if (WindowState != WindowState.Normal) return;
 
         var area = SystemParameters.WorkArea;
         if (e.HeightChanged && e.NewSize.Height > e.PreviousSize.Height
